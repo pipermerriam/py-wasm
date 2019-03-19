@@ -21,6 +21,9 @@ from wasm.datatypes import (
 from wasm.exceptions import (
     ParseError,
 )
+from wasm.instructions import (
+    BaseInstruction,
+)
 from wasm.instructions.control import (
     Call,
     Return,
@@ -31,6 +34,7 @@ from wasm.instructions.control import (
     Unreachable,
     Block,
     End,
+    If,
 )
 from wasm.instructions.variable import (
     LocalOp,
@@ -70,6 +74,7 @@ from wasm.opcodes import (
 
 from .grammar import GRAMMAR
 from .ir import (
+    BaseUnresolved,
     NamedBlock,
     Local,
     Param,
@@ -169,6 +174,19 @@ def process_vars(resolved_cls, unresolved_cls, vars):
             raise Exception("INVALID")
 
 
+def is_instruction(value):
+    return isinstance(value, (BaseInstruction, BaseUnresolved))
+
+
+def is_instruction_sequence(value):
+    if is_instruction(value):
+        return False
+    elif isinstance(value, tuple):
+        return all(isinstance(item, (BaseInstruction, BaseUnresolved)) for item in value)
+    else:
+        return False
+
+
 class NodeVisitor(parsimonious.NodeVisitor):
     """
     Parsimonious node visitor which performs both parsing of type strings and
@@ -203,50 +221,132 @@ class NodeVisitor(parsimonious.NodeVisitor):
         return tuple(cons(head, tail))
 
     @staticmethod
-    def _unwrap_parens(node, visited_children):
+    def _unwrap_single_parens(node, visited_children):
         lparen, thing, rparen = visited_children
         assert is_empty(lparen, rparen)
         return thing
+
+    @staticmethod
+    def _unwrap_many_parens(node, visited_children):
+        lparen, *things, rparen = visited_children
+        assert is_empty(lparen, rparen)
+        return things
+
+    @staticmethod
+    def _unwrap_whitespace_prefix(thing_with_prefix):
+        ws, thing = thing_with_prefix
+        assert is_empty(ws)
+        return thing
+
+    #
+    # Expressions
+    #
+    def visit_expr(self, node, visited_children):
+        return self._unwrap_single_parens(node, visited_children)
+
+    def visit_exprs(self, node, visited_children):
+        head, tail = visited_children
+        if is_instruction(head) and is_instruction_sequence(tail):
+            return tuple(cons(head, tail))
+        elif is_instruction_sequence(head) and is_instruction_sequence(tail):
+            return tuple(concatv(head, tail))
+        else:
+            raise Exception("INVALID")
+
+        assert False
+
+    def visit_exprs_tail(self, node, visited_children):
+        ws, instr = visited_children
+        assert is_empty(ws)
+        return instr
+
+    def visit_folded_op(self, node, visited_children):
+        op, ws, exprs = visited_children
+        assert is_empty(ws)
+        return exprs + (op,)
 
     #
     # Instructions
     #
     def visit_instrs(self, node, visited_children):
         head, tail = visited_children
-        joined = self._join_multi_head_with_tail(node, visited_children)
-        print('HEAD:', head)
-        print('TAIL:', tail)
-        print('JOINED:', joined)
-        return joined
-        return self._join_multi_head_with_tail(node, visited_children)
+        if is_instruction(head) and is_instruction_sequence(tail):
+            return tuple(cons(head, tail))
+        elif is_instruction_sequence(head) and is_instruction_sequence(tail):
+            return tuple(concatv(head, tail))
+        else:
+            raise Exception("INVALID")
 
     def visit_instrs_tail(self, node, visited_children):
+        ws, instr = visited_children
+        assert is_empty(ws)
+        return instr
+
+    #
+    # If / Then / Else
+    #
+    """
+    if_instr = exprs "if" (_ name)? (_ result)? (_ instrs)? _ "else" (_ instrs)? _ end_op
+    if_meat = "if" (_ name)? (_ result)? (_ instrs)? _ then_folded (_ else_folded)?
+    then_folded = open "then" (_ instrs)? close
+    else_folded = open "else" (_ instrs)? close
+    """
+    def visit_if_instr(self, node, visited_children):
         assert False
 
-    def visit_instr(self, node, visited_children):
-        return self._unwrap_parens(node, visited_children)
+    def visit_if_meat(self, node, visited_children):
+        (
+            txt,
+            raw_name,
+            raw_result_type,
+            raw_condition_instructions,
+            ws,
+            instructions,
+            raw_else,
+        ) = visited_children
+        assert is_empty(txt, ws)
+        assert raw_name is None
+        assert raw_result_type is None
+        assert raw_else is None
 
-    def visit_loop_instr(self, node, visited_children):
+        if raw_condition_instructions is None:
+            raise Exception("INVALID?")
+        else:
+            conditions = self._unwrap_whitespace_prefix(raw_condition_instructions)
+
+        return conditions + (If((), instructions, ()),)
+
+    def visit_then_folded(self, node, visited_children):
+        txt, instructions = self._unwrap_many_parens(node, visited_children)
+        assert is_empty(txt)
+        if instructions is None:
+            return ()
+        else:
+            return instructions
+
+    def visit_else_folded(self, node, visited_children):
         assert False
 
-    def visit_block_instr(self, node, visited_children):
+    #
+    # Blocks / Loops
+    #
+    def visit_block_or_loop_instr(self, node, visited_children):
+        assert False
+
+    def visit_block_or_loop_meat(self, node, visited_children):
         txt, raw_name, (block_type, instructions) = visited_children
         assert is_empty(txt)
 
         block = Block(block_type, instructions)
 
         if raw_name is None:
-            return block
+            return (block,)
         else:
             ws, name = raw_name
             assert is_empty(ws)
             return NamedBlock(name, block)
 
-    def visit_op(self, node, visited_children):
-        op, = visited_children
-        return (op,)
-
-    def visit_block_tail(self, node, visited_children):
+    def visit_block_or_loop_tail(self, node, visited_children):
         raw_block_type, raw_instructions = visited_children
 
         if raw_block_type is None:
@@ -261,13 +361,11 @@ class NodeVisitor(parsimonious.NodeVisitor):
             ws, instructions = raw_instructions
             assert is_empty(ws)
 
-        print('INSTRUCTIONS:', instructions)
-
         return block_type, instructions
 
     def visit_folded_instr(self, node, visited_children):
         head, ws, tail = visited_children
-        return tail + head
+        return tail + (head,)
 
     #
     # Control ops
@@ -348,12 +446,13 @@ class NodeVisitor(parsimonious.NodeVisitor):
     # Function Type
     #
     def visit_func_type(self, node, visited_children):
-        lparen, txt, ws, func_type, rparen = visited_children
-        assert is_empty(lparen, txt, ws, rparen)
+        txt, ws, func_type = self._unwrap_many_parens(node, visited_children)
+        assert is_empty(txt, ws)
         return func_type
 
     def visit_typeuse(self, node, visited_children):
         typeuse, = visited_children
+
         if isinstance(typeuse, TypeIdx):
             return typeuse
         elif isinstance(typeuse, UnresolvedFunctionType):
@@ -370,8 +469,8 @@ class NodeVisitor(parsimonious.NodeVisitor):
             raise Exception("INVALID")
 
     def visit_typeuse_direct(self, node, visited_children):
-        lparen, text, ws, var, rparen = visited_children
-        assert is_empty(lparen, text, ws, rparen)
+        text, ws, var = self._unwrap_many_parens(node, visited_children)
+        assert is_empty(text, ws)
         if isinstance(var, str):
             return UnresolvedTypeIdx(var)
         elif isinstance(var, int):
@@ -577,7 +676,7 @@ class NodeVisitor(parsimonious.NodeVisitor):
         return self._process_tail(node, visited_children)
 
     def visit_param(self, node, visited_children):
-        return self._unwrap_parens(node, visited_children)
+        return self._unwrap_single_parens(node, visited_children)
 
     def visit_named_param(self, node, visited_children):
         ws0, txt, name, ws1, valtype = visited_children
@@ -599,7 +698,7 @@ class NodeVisitor(parsimonious.NodeVisitor):
         return self._process_tail(node, visited_children)
 
     def visit_result(self, node, visited_children):
-        return self._unwrap_parens(node, visited_children)
+        return self._unwrap_single_parens(node, visited_children)
 
     def visit_declared_result(self, node, visited_children):
         txt, ws, valtypes = visited_children
@@ -619,7 +718,7 @@ class NodeVisitor(parsimonious.NodeVisitor):
         return self._process_tail(node, visited_children)
 
     def visit_local(self, node, visited_children):
-        return self._unwrap_parens(node, visited_children)
+        return self._unwrap_single_parens(node, visited_children)
 
     def visit_named_local(self, node, visited_children):
         ws0, txt, name, ws1, valtype = visited_children

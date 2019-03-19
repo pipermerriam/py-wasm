@@ -146,27 +146,41 @@ expr = open (
 
 
 named_block_instr = "block" _ name)? results? instrs _ "end" _ name?) /
+
+if_instr = exprs "if" (_ name)? (_ result)? (_ instrs)? "else" (_ instrs)? _ end_op
 """
 
 GRAMMAR = parsimonious.Grammar(r"""
-component = results / params / locals / func_type / op / instrs
+exprs = expr exprs_tail*
+exprs_tail = (_ expr)
+expr = open any_expr close
+any_expr =
+    if_meat /
+    block_instr_meat /
+    folded_op /
+    op
 
 instrs = instr instrs_tail*
 instrs_tail = (_ instr)
-instr = open any_instr close
-any_instr =
-    folded_instr /
+instr =
+    block_or_loop_instr /
     op /
-    block_instr /
-    loop_instr
+    expr
 
-loop_instr = "loop"  (_ name)? loop_tail?
-loop_tail = (_ result)? (_ instrs)?
+folded_op = op _ exprs
 
-block_instr = "block" (_ name)? block_tail?
-block_tail = (_ result)? (_ instrs)?
+if_instr = exprs "if" (_ name)? (_ result)? (_ instrs)? _ "else" (_ instrs)? _ end_op
+if_meat = "if" (_ name)? (_ result)? (_ instrs)? _ then_folded (_ else_folded)?
+then_folded = open "then" (_ instrs)? close
+else_folded = open "else" (_ instrs)? close
 
-folded_instr = op _ instrs
+block_instr = block_or_loop_instr
+block_instr_meat = block_or_loop_meat
+
+block_or_loop_instr = block_or_loop_meat _ end_op
+block_or_loop_meat = block_or_loop (_ name)? block_or_loop_tail?
+block_or_loop_tail = (_ result)? (_ instrs)?
+block_or_loop = "block" / "loop"
 
 op = numeric_op / memory_op / variable_op / parametric_op / control_op
 
@@ -182,6 +196,7 @@ control_op =
 
 unreachable_op = "unreachable"
 nop_op = "nop"
+end_op = "end"
 
 return_op = "return"
 

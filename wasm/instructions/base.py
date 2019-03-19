@@ -5,9 +5,6 @@ from typing import (
     TypeVar,
 )
 
-from wasm._utils.interned import (
-    Interned,
-)
 from wasm.opcodes import (
     BinaryOpcode,
 )
@@ -33,7 +30,7 @@ def register(cls: Type[TInstruction]) -> Type[TInstruction]:
     return cls
 
 
-class SimpleOp(Interned):
+class SimpleOp:
     """
     Base class for opcodes which don't have any arguments or state whos
     instances can be reused.
@@ -43,5 +40,8 @@ class SimpleOp(Interned):
     def __str__(self) -> str:
         return self.opcode.text
 
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__}: {str(self)}>"
+
     def __eq__(self, other: Any) -> bool:
-        return self is other
+        return type(self) is type(other)

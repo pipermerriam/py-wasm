@@ -1,6 +1,6 @@
 import pytest
 
-from wasm.text import parse
+from wasm.text import GRAMMAR
 from wasm.datatypes import (
     ValType,
 )
@@ -13,6 +13,9 @@ i32 = ValType.i32
 i64 = ValType.i64
 f32 = ValType.f32
 f64 = ValType.f64
+
+
+grammar = GRAMMAR['func_type']
 
 
 @pytest.mark.parametrize(
@@ -38,6 +41,6 @@ f64 = ValType.f64
         # ("(func (result i32) (unreachable))  # TODO: this is not a raw functype but rather a `function` definition.
     ),
 )
-def test_sexpression_parametric_instruction_parsing(sexpr, expected):
+def test_sexpression_parametric_instruction_parsing(sexpr, expected, parse):
     actual = parse(sexpr)
     assert actual == expected

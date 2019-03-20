@@ -156,7 +156,7 @@ exprs_tail = (_ expr)
 expr = open any_expr close
 any_expr =
     if_meat /
-    block_instr_meat /
+    block_or_loop_meat /
     folded_op /
     op
 
@@ -169,18 +169,19 @@ instr =
 
 folded_op = op _ exprs
 
-if_instr = exprs "if" (_ name)? (_ result)? (_ instrs)? _ "else" (_ instrs)? _ end_op
-if_meat = "if" (_ name)? (_ result)? (_ instrs)? _ then_folded (_ else_folded)?
-then_folded = open "then" (_ instrs)? close
-else_folded = open "else" (_ instrs)? close
-
-block_instr = block_or_loop_instr
-block_instr_meat = block_or_loop_meat
+if_instr = exprs "if" maybe_name? maybe_result? maybe_instrs? _ "else" maybe_instrs? _ end_op
+if_meat = "if" maybe_name? maybe_result? maybe_instrs? _ then_folded maybe_else?
+then_folded = open "then" maybe_instrs? close
+else_folded = open "else" maybe_instrs? close
+maybe_else = _ else_folded
 
 block_or_loop_instr = block_or_loop_meat _ end_op
-block_or_loop_meat = block_or_loop (_ name)? block_or_loop_tail?
-block_or_loop_tail = (_ result)? (_ instrs)?
+block_or_loop_meat = block_or_loop maybe_name? maybe_result? maybe_instrs?
 block_or_loop = "block" / "loop"
+
+maybe_instrs = _ instrs
+maybe_result = _ result
+maybe_name = _ name
 
 op = numeric_op / memory_op / variable_op / parametric_op / control_op
 

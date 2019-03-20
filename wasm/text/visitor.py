@@ -33,7 +33,6 @@ from wasm.instructions.control import (
     Nop,
     Unreachable,
     Block,
-    End,
     If,
 )
 from wasm.instructions.variable import (
@@ -297,22 +296,20 @@ class NodeVisitor(parsimonious.NodeVisitor):
     def visit_if_meat(self, node, visited_children):
         (
             txt,
-            raw_name,
-            raw_result_type,
-            raw_condition_instructions,
+            name,
+            result_type,
+            conditions,
             ws,
             instructions,
-            raw_else,
+            _else,
         ) = visited_children
         assert is_empty(txt, ws)
-        assert raw_name is None
-        assert raw_result_type is None
-        assert raw_else is None
+        assert name is None
+        assert result_type is None
+        assert _else is None
 
-        if raw_condition_instructions is None:
+        if conditions is None:
             raise Exception("INVALID?")
-        else:
-            conditions = self._unwrap_whitespace_prefix(raw_condition_instructions)
 
         return conditions + (If((), instructions, ()),)
 
@@ -327,6 +324,9 @@ class NodeVisitor(parsimonious.NodeVisitor):
     def visit_else_folded(self, node, visited_children):
         assert False
 
+    def visit_maybe_else(self, node, visited_children):
+        assert False
+
     #
     # Blocks / Loops
     #
@@ -334,34 +334,30 @@ class NodeVisitor(parsimonious.NodeVisitor):
         assert False
 
     def visit_block_or_loop_meat(self, node, visited_children):
-        txt, raw_name, (block_type, instructions) = visited_children
+        txt, name, block_type, instructions = visited_children
         assert is_empty(txt)
+
+        if block_type is None:
+            block_type = ()
+
+        if instructions is None:
+            instructions = ()
 
         block = Block(block_type, instructions)
 
-        if raw_name is None:
-            return (block,)
+        if name is None:
+            return block
         else:
-            ws, name = raw_name
-            assert is_empty(ws)
             return NamedBlock(name, block)
 
-    def visit_block_or_loop_tail(self, node, visited_children):
-        raw_block_type, raw_instructions = visited_children
+    def visit_maybe_instrs(self, node, visited_children):
+        return self._unwrap_whitespace_prefix(node, visited_children)
 
-        if raw_block_type is None:
-            block_type = tuple()
-        else:
-            ws, block_type = raw_block_type
-            assert is_empty(ws)
+    def visit_maybe_result(self, node, visited_children):
+        return self._unwrap_whitespace_prefix(node, visited_children)
 
-        if raw_instructions is None:
-            instructions = End.as_tail()
-        else:
-            ws, instructions = raw_instructions
-            assert is_empty(ws)
-
-        return block_type, instructions
+    def visit_maybe_name(self, node, visited_children):
+        return self._unwrap_whitespace_prefix(node, visited_children)
 
     def visit_folded_instr(self, node, visited_children):
         head, ws, tail = visited_children
@@ -370,6 +366,9 @@ class NodeVisitor(parsimonious.NodeVisitor):
     #
     # Control ops
     #
+    def visit_end_op(self, node, visited_children):
+        assert False
+
     def visit_nop_op(self, node, visited_children):
         assert is_empty(visited_children)
         return Nop()

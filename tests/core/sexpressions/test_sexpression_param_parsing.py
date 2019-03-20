@@ -1,17 +1,12 @@
 import pytest
 
-from wasm.text import GRAMMAR
+from wasm.text.lark import parser
 from wasm.datatypes import ValType
 from wasm.text.ir import Param
 
 
 i32 = ValType.i32
 i64 = ValType.i64
-f32 = ValType.f32
-f64 = ValType.f64
-
-
-grammar = GRAMMAR['params']
 
 
 @pytest.mark.parametrize(
@@ -28,6 +23,6 @@ grammar = GRAMMAR['params']
         ('(param $x i32)', (Param(i32, '$x'),)),
     ),
 )
-def test_sexpression_param_parsing(sexpr, expected, parse):
-    actual = parse(sexpr)
+def test_sexpression_param_parsing(sexpr, expected):
+    actual = parser.parse(sexpr)
     assert actual == expected

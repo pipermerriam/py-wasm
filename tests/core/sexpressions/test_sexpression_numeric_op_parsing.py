@@ -1,6 +1,6 @@
 import pytest
 
-from wasm.text import parse
+from wasm.text.lark import parser
 from wasm.datatypes import ValType
 from wasm.instructions.numeric import (
     Reinterpret,
@@ -39,7 +39,7 @@ f64 = ValType.f64
     ),
 )
 def test_sexpression_numeric_constant_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected
 
 
@@ -64,7 +64,7 @@ OP_PAIRS = (
     ),
 )
 def test_sexpression_unop_binop_relop_instruction_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected
 
 
@@ -77,7 +77,7 @@ def test_sexpression_unop_binop_relop_instruction_parsing(sexpr, expected):
     ),
 )
 def test_sexpression_wrap_and_extend_instruction_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected
 
 
@@ -95,7 +95,7 @@ def test_sexpression_wrap_and_extend_instruction_parsing(sexpr, expected):
     )
 )
 def test_sexpression_trunc_instruction_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected
 
 
@@ -113,7 +113,7 @@ def test_sexpression_trunc_instruction_parsing(sexpr, expected):
     )
 )
 def test_sexpression_convert_instruction_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected
 
 
@@ -125,7 +125,7 @@ def test_sexpression_convert_instruction_parsing(sexpr, expected):
     ),
 )
 def test_sexpression_demote_and_promote_instruction_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected
 
 
@@ -139,5 +139,5 @@ def test_sexpression_demote_and_promote_instruction_parsing(sexpr, expected):
     )
 )
 def test_sexpression_reinterpret_instruction_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected

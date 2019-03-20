@@ -1,6 +1,6 @@
 import pytest
 
-from wasm.text import GRAMMAR
+from wasm.text.lark import parser
 from wasm.text.ir import Local
 from wasm.datatypes import ValType
 
@@ -9,9 +9,6 @@ i32 = ValType.i32
 i64 = ValType.i64
 f32 = ValType.f32
 f64 = ValType.f64
-
-
-grammar = GRAMMAR['locals']
 
 
 @pytest.mark.parametrize(
@@ -25,12 +22,12 @@ grammar = GRAMMAR['locals']
         ('(local i32 i64)', (Local(i32), Local(i64))),
         ('(local f32 f64)', (Local(f32), Local(f64))),
         ('(local f32 f64 i32 i64)', (Local(f32), Local(f64), Local(i32), Local(i64))),
-        # named
+        # # named
         ('(local $i i32)', (Local(i32, '$i'),)),
-        # multi
+        # # multi
         ('(local f32 f64)\n(local $i i32)', (Local(f32), Local(f64), Local(i32, '$i'))),
     ),
 )
-def test_sexpression_locals_parsing(sexpr, expected, parse):
-    actual = parse(sexpr)
+def test_sexpression_locals_parsing(sexpr, expected):
+    actual = parser.parse(sexpr)
     assert actual == expected

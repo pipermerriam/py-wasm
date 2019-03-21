@@ -9,11 +9,13 @@ from wasm.datatypes import (
     TypeIdx,
     LocalIdx,
     GlobalIdx,
+    FunctionIdx,
 )
 from wasm.instructions.control import (
     Unreachable,
     Return,
     Nop,
+    Call,
 )
 from wasm.instructions.variable import (
     LocalOp,
@@ -51,7 +53,9 @@ from .ir import (
     UnresolvedLocalIdx,
     UnresolvedVariableOp,
     UnresolvedCallIndirect,
+    UnresolvedCall,
     UnresolvedTypeIdx,
+    UnresolvedFunctionIdx,
     UnresolvedFunctionType,
 )
 
@@ -130,8 +134,14 @@ class WasmTransformer(Transformer):
     #
     # Control Ops
     #
-    def call_op(self, args):
-        assert False
+    @v_args(inline=True)
+    def call_op(self, var):
+        if isinstance(var, UnresolvedFunctionIdx):
+            return UnresolvedCall(var)
+        elif isinstance(var, FunctionIdx):
+            return Call(var)
+        else:
+            raise Exception("INVALID")
 
     @v_args(inline=True)
     def call_indirect_op(self, typeuse):
@@ -157,18 +167,18 @@ class WasmTransformer(Transformer):
         return Return()
 
     @v_args(inline=True)
-    def typeuse_params_only(self, params):
-        return params, ()
+    def typeuse_params_only(self, *params):
+        return tuple(concat(params)), ()
 
     @v_args(inline=True)
-    def typeuse_results_only(self, results):
-        return (), results
+    def typeuse_results_only(self, *results):
+        return (), tuple(concat(results))
 
-    @v_args(inline=True)
-    def typeuse_params_and_results(self, params, results=None):
-        if results is None:
-            results = ()
-
+    def typeuse_params_and_results(self, raw_params_and_results):
+        params_and_results = tuple(concat(raw_params_and_results))
+        params = tuple(value for value in params_and_results if isinstance(value, Param))
+        results = tuple(value for value in params_and_results if isinstance(value, ValType))
+        assert len(params_and_results) == len(params) + len(results)
         return params, results
 
     #
@@ -369,6 +379,15 @@ class WasmTransformer(Transformer):
             return GlobalIdx(var)
         elif isinstance(var, str):
             return UnresolvedGlobalIdx(var)
+        else:
+            raise Exception("INVALID")
+
+    @v_args(inline=True)
+    def funcidx(self, var):
+        if isinstance(var, int):
+            return FunctionIdx(var)
+        elif isinstance(var, str):
+            return UnresolvedFunctionIdx(var)
         else:
             raise Exception("INVALID")
 

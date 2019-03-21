@@ -50,12 +50,6 @@ class Param(NamedTuple):
 
 
 @register
-class UnresolvedVariableOp(NamedTuple):
-    opcode: BinaryOpcode
-    name: str
-
-
-@register
 class UnresolvedFunctionType(NamedTuple):
     params: Tuple[Param, ...]
     results: Tuple[ValType, ...]
@@ -72,8 +66,24 @@ class UnresolvedLabelIdx(NamedTuple):
 
 
 @register
+class UnresolvedLocalIdx(NamedTuple):
+    name: str
+
+
+@register
+class UnresolvedGlobalIdx(NamedTuple):
+    name: str
+
+
+@register
 class UnresolvedFunctionIdx(NamedTuple):
     name: str
+
+
+@register
+class UnresolvedVariableOp(NamedTuple):
+    opcode: BinaryOpcode
+    name: UnresolvedLocalIdx
 
 
 @register

@@ -1,7 +1,6 @@
 import pytest
 
 from wasm.text.lark import parser
-from wasm.datatypes import ValType
 from wasm.instructions.numeric import (
     Reinterpret,
     Demote,
@@ -20,12 +19,6 @@ from wasm.instructions.numeric import (
     Truncate,
 )
 from wasm.opcodes import BinaryOpcode
-
-
-i32 = ValType.i32
-i64 = ValType.i64
-f32 = ValType.f32
-f64 = ValType.f64
 
 
 @pytest.mark.parametrize(
@@ -63,7 +56,7 @@ OP_PAIRS = (
         for op in ops
     ),
 )
-def test_sexpression_unop_binop_relop_instruction_parsing(sexpr, expected):
+def test_sexpression_unop_binop_relop_testop_instruction_parsing(sexpr, expected):
     actual = parser.parse(sexpr)
     assert actual == expected
 

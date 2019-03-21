@@ -1,6 +1,6 @@
 import pytest
 
-from wasm.text import parse
+from wasm.text.lark import parser
 from wasm.instructions.control import (
     Unreachable,
 )
@@ -13,5 +13,5 @@ from wasm.instructions.control import (
     ),
 )
 def test_sexpression_unreachable_instructions_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected

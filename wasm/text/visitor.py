@@ -108,7 +108,6 @@ def _is_empty(value):
     else:
         return False
 
-
 TRUNC_LOOKUP = {
     'i32.trunc_f32_s': BinaryOpcode.I32_TRUNC_S_F32,
     'i32.trunc_f32_u': BinaryOpcode.I32_TRUNC_U_F64,

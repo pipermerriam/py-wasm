@@ -223,14 +223,9 @@ _TYPE: "type"
 
 typeidx: _var
 
-_typeuse_direct: _ws _open _TYPE _ws typeidx _close
-typeuse_params_and_results: (_ws param)+ (_ws result)+
-typeuse_params_only: (_ws param)+
-typeuse_results_only: (_ws result)+
-?typeuse: _typeuse_direct
-    | typeuse_params_and_results
-    | typeuse_params_only
-    | typeuse_results_only
+_typeuse_direct: _open _TYPE _ws typeidx _close
+typeuse_params_and_results: (_ws param)* (_ws result)*
+?typeuse: _ws _typeuse_direct | typeuse_params_and_results
 
 FUNC: "func"
 
@@ -251,9 +246,11 @@ funcidx: _var
 call_op: _CALL _ws funcidx
 call_indirect_op: _CALL_INDIRECT typeuse
 
-br_if_op:    _BR_IF    _ws _var
-br_table_op: _BR_TABLE _ws _vars
-br_op:       _BR       _ws _var
+labelidx: _var
+
+br_if_op:    _BR_IF    _ws labelidx
+br_table_op: _BR_TABLE (_ws labelidx)+
+br_op:       _BR       _ws labelidx
 
 return_op:      _RETURN
 unreachable_op: _UNREACHABLE

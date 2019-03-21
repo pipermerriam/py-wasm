@@ -1,6 +1,6 @@
 import pytest
 
-from wasm.text import parse
+from wasm.text.lark import parser
 from wasm.datatypes import (
     LabelIdx,
 )
@@ -39,5 +39,5 @@ from wasm.text.ir import (
     ),
 )
 def test_sexpression_br_instructions_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parser.parse(sexpr)
     assert actual == expected

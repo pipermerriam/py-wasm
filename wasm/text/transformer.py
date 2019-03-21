@@ -10,12 +10,16 @@ from wasm.datatypes import (
     LocalIdx,
     GlobalIdx,
     FunctionIdx,
+    LabelIdx,
 )
 from wasm.instructions.control import (
     Unreachable,
     Return,
     Nop,
     Call,
+    Br,
+    BrIf,
+    BrTable,
 )
 from wasm.instructions.variable import (
     LocalOp,
@@ -49,6 +53,9 @@ from .ir import (
     BaseUnresolved,
     Local,
     Param,
+    UnresolvedBr,
+    UnresolvedBrIf,
+    UnresolvedBrTable,
     UnresolvedGlobalIdx,
     UnresolvedLocalIdx,
     UnresolvedVariableOp,
@@ -57,6 +64,7 @@ from .ir import (
     UnresolvedTypeIdx,
     UnresolvedFunctionIdx,
     UnresolvedFunctionType,
+    UnresolvedLabelIdx,
 )
 
 
@@ -134,6 +142,41 @@ class WasmTransformer(Transformer):
     #
     # Control Ops
     #
+    @v_args(inline=True)
+    def br_op(self, var):
+        if isinstance(var, UnresolvedLabelIdx):
+            return UnresolvedBr(var)
+        elif isinstance(var, LabelIdx):
+            return Br(var)
+        else:
+            raise Exception("INVALID")
+
+    @v_args(inline=True)
+    def br_if_op(self, var):
+        if isinstance(var, UnresolvedLabelIdx):
+            return UnresolvedBrIf(var)
+        elif isinstance(var, LabelIdx):
+            return BrIf(var)
+        else:
+            raise Exception("INVALID")
+
+    def br_table_op(self, all_label_indices):
+        is_resolved = (
+            all(isinstance(label_idx, int) for label_idx in all_label_indices)
+        )
+        *label_indices, default_idx = all_label_indices
+        if is_resolved:
+            return BrTable(
+                label_indices=tuple(label_indices),
+                default_idx=default_idx,
+            )
+        else:
+            return UnresolvedBrTable(
+                label_indices=tuple(label_indices),
+                default_idx=default_idx,
+            )
+        assert False
+
     @v_args(inline=True)
     def call_op(self, var):
         if isinstance(var, UnresolvedFunctionIdx):
@@ -388,6 +431,15 @@ class WasmTransformer(Transformer):
             return FunctionIdx(var)
         elif isinstance(var, str):
             return UnresolvedFunctionIdx(var)
+        else:
+            raise Exception("INVALID")
+
+    @v_args(inline=True)
+    def labelidx(self, var):
+        if isinstance(var, int):
+            return LabelIdx(var)
+        elif isinstance(var, str):
+            return UnresolvedLabelIdx(var)
         else:
             raise Exception("INVALID")
 

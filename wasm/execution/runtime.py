@@ -16,6 +16,9 @@ import numpy
 from wasm._utils.decorators import (
     to_tuple,
 )
+from wasm.binary import (
+    parse_module,
+)
 from wasm.datatypes import (
     DataSegment,
     ElementSegment,
@@ -36,9 +39,6 @@ from wasm.exceptions import (
     ParseError,
     Unlinkable,
     ValidationError,
-)
-from wasm.binary import (
-    parse_module,
 )
 from wasm.typing import (
     TValue,

@@ -1,6 +1,5 @@
 import pytest
 
-from wasm.text import parse
 from wasm.datatypes import (
     LabelIdx,
 )
@@ -8,6 +7,9 @@ from wasm.instructions.control import (
     Br,
     BrIf,
     BrTable,
+)
+from wasm.text import (
+    parse,
 )
 from wasm.text.ir import (
     UnresolvedBr,

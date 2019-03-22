@@ -2,11 +2,13 @@ import pytest
 
 from wasm.instructions.memory import (
     MemoryArg,
+    MemoryGrow,
     MemoryOp,
     MemorySize,
-    MemoryGrow,
 )
-from wasm.opcodes import BinaryOpcode
+from wasm.opcodes import (
+    BinaryOpcode,
+)
 
 
 @pytest.mark.parametrize(

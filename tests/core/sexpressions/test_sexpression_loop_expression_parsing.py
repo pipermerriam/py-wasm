@@ -1,19 +1,25 @@
+import numpy
 import pytest
 
-import numpy
-
-from wasm.text import parse
-from wasm.datatypes import ValType
+from wasm.datatypes import (
+    ValType,
+)
 from wasm.instructions.control import (
-    Loop,
     End,
+    Loop,
     Nop,
 )
 from wasm.instructions.numeric import (
     I32Const,
 )
-from wasm.text.ir import NamedLoop, UnresolvedCall, UnresolvedFunctionIdx
-
+from wasm.text import (
+    parse,
+)
+from wasm.text.ir import (
+    NamedLoop,
+    UnresolvedCall,
+    UnresolvedFunctionIdx,
+)
 
 i32 = ValType.i32
 

@@ -27,7 +27,7 @@ NAME_CHAR: LETTER | DIGIT
 NAME: "$" NAME_CHAR+
 
 STRING_CHAR: CHAR | /\n/ | /\t/ | /\\/ | "'" | "\\\"" | "\\" HEX HEX | /\\u/ HEX+
-STRING: "\"" STRING_CHAR* "\""
+_STRING_QUOTE: "\""
 
 VAR: NAT | NAME
 
@@ -39,7 +39,7 @@ nat:    NAT
 int:    INT
 float:  FLOAT
 ?name:   NAME
-string: STRING
+string: _STRING_QUOTE STRING_CHAR* _STRING_QUOTE
 
 _value: int | float
 _var: nat | name
@@ -320,6 +320,23 @@ folded_op: op _ws exprs
 expr: _open (op | inlined_folded_op | block_body | loop_body | folded_if) _close
 _exprs_tail: _ws expr
 ?exprs: expr _exprs_tail*
+
+_EXPORT: "export"
+
+tableidx: _var
+memoryidx: _var
+
+_GLOBAL: "global"
+_TABLE: "table"
+_MEMORY: "memory"
+
+?exfunc: _open _FUNC _ws funcidx _close
+?exglobal: _open _GLOBAL _ws globalidx _close
+?extable: _open _TABLE _ws tableidx _close
+?exmemory: _open _MEMORY _ws memoryidx _close
+export: _open _EXPORT _ws string _ws (exfunc | exglobal | extable | exmemory) _close
+_exports_tail: _ws export
+?exports: export _exports_tail*
 
 ?start: exprs
 """

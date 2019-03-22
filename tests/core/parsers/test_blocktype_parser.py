@@ -2,14 +2,14 @@ import io
 
 import pytest
 
+from wasm.binary.blocks import (
+    parse_blocktype,
+)
 from wasm.datatypes import (
     ValType,
 )
 from wasm.exceptions import (
     ParseError,
-)
-from wasm.binary.blocks import (
-    parse_blocktype,
 )
 
 

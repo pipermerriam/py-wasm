@@ -1,4 +1,9 @@
-from lark import Transformer, v_args, Tree, Token
+from lark import (
+    Token,
+    Transformer,
+    Tree,
+    v_args,
+)
 
 from wasm._utils.decorators import (
     to_tuple,
@@ -6,84 +11,92 @@ from wasm._utils.decorators import (
 from wasm._utils.toolz import (
     concat,
 )
-from wasm.opcodes import TEXT_TO_OPCODE, BinaryOpcode
 from wasm.datatypes import (
-    ValType,
-    TypeIdx,
-    LocalIdx,
-    GlobalIdx,
+    Export,
     FunctionIdx,
+    GlobalIdx,
     LabelIdx,
+    LocalIdx,
+    MemoryIdx,
+    TableIdx,
+    TypeIdx,
+    ValType,
 )
 from wasm.instructions import (
     BaseInstruction,
 )
 from wasm.instructions.control import (
     Block,
-    Unreachable,
-    Return,
-    End,
-    Nop,
-    Call,
-    If,
     Br,
     BrIf,
     BrTable,
+    Call,
+    End,
+    If,
     Loop,
+    Nop,
+    Return,
+    Unreachable,
+)
+from wasm.instructions.memory import (
+    MemoryArg,
+    MemoryGrow,
+    MemoryOp,
+    MemorySize,
+)
+from wasm.instructions.numeric import (
+    BinOp,
+    Convert,
+    Demote,
+    Extend,
+    F32Const,
+    F64Const,
+    I32Const,
+    I64Const,
+    Promote,
+    Reinterpret,
+    RelOp,
+    TestOp,
+    Truncate,
+    UnOp,
+    Wrap,
 )
 from wasm.instructions.parametric import (
     Drop,
     Select,
 )
 from wasm.instructions.variable import (
-    LocalOp,
     GlobalOp,
+    LocalOp,
 )
-from wasm.instructions.memory import (
-    MemoryArg,
-    MemoryOp,
-    MemoryGrow,
-    MemorySize,
-)
-from wasm.instructions.numeric import (
-    I32Const,
-    I64Const,
-    F32Const,
-    F64Const,
-    UnOp,
-    RelOp,
-    BinOp,
-    TestOp,
-    Wrap,
-    Extend,
-    Promote,
-    Demote,
-    Truncate,
-    Convert,
-    Reinterpret,
+from wasm.opcodes import (
+    TEXT_TO_OPCODE,
+    BinaryOpcode,
 )
 
 from .ir import (
-    NamedLoop,
-    NamedBlock,
-    NamedIf,
     BaseUnresolved,
     Local,
+    NamedBlock,
+    NamedIf,
+    NamedLoop,
     Param,
     UnresolvedBr,
     UnresolvedBrIf,
     UnresolvedBrTable,
-    UnresolvedGlobalIdx,
-    UnresolvedLocalIdx,
-    UnresolvedVariableOp,
-    UnresolvedCallIndirect,
     UnresolvedCall,
-    UnresolvedTypeIdx,
+    UnresolvedCallIndirect,
+    UnresolvedExport,
     UnresolvedFunctionIdx,
     UnresolvedFunctionType,
+    UnresolvedGlobalIdx,
     UnresolvedLabelIdx,
+    UnresolvedLocalIdx,
+    UnresolvedMemoryIdx,
+    UnresolvedTableIdx,
+    UnresolvedTypeIdx,
+    UnresolvedVariableOp,
 )
-
 
 VARIABLE_LOOKUP = {
     'local.get': (LocalOp, BinaryOpcode.GET_LOCAL),
@@ -160,6 +173,18 @@ def normalize_expressions(expressions):
 
 
 class WasmTransformer(Transformer):
+    #
+    # Exports
+    #
+    @v_args(inline=True)
+    def export(self, name, index):
+        if isinstance(index, BaseUnresolved):
+            return UnresolvedExport(name, index)
+        elif isinstance(index, int):  # TODO: need base indices class
+            return Export(name, index)
+        else:
+            raise Exception("INVALID")
+
     #
     # Expressions
     #
@@ -592,6 +617,24 @@ class WasmTransformer(Transformer):
         else:
             raise Exception("INVALID")
 
+    @v_args(inline=True)
+    def tableidx(self, var):
+        if isinstance(var, int):
+            return TableIdx(var)
+        elif isinstance(var, str):
+            return UnresolvedTableIdx(var)
+        else:
+            raise Exception("INVALID")
+
+    @v_args(inline=True)
+    def memoryidx(self, var):
+        if isinstance(var, int):
+            return MemoryIdx(var)
+        elif isinstance(var, str):
+            return UnresolvedMemoryIdx(var)
+        else:
+            raise Exception("INVALID")
+
     #
     # ValType values
     #
@@ -630,3 +673,7 @@ class WasmTransformer(Transformer):
 
     def float(self, args):
         assert False
+
+    @v_args(inline=True)
+    def string(self, token):
+        return token.value

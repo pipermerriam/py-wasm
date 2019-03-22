@@ -1,10 +1,8 @@
 import pytest
 
-from wasm.text.ir import (
-    NamedIf,
+from wasm.datatypes import (
+    LocalIdx,
 )
-from wasm.datatypes import LocalIdx
-from wasm.opcodes import BinaryOpcode
 from wasm.instructions.control import (
     End,
     If,
@@ -12,6 +10,12 @@ from wasm.instructions.control import (
 )
 from wasm.instructions.variable import (
     LocalOp,
+)
+from wasm.opcodes import (
+    BinaryOpcode,
+)
+from wasm.text.ir import (
+    NamedIf,
 )
 
 NOP = Nop()

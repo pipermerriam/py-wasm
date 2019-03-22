@@ -2,14 +2,14 @@ import io
 
 import pytest
 
+from wasm.binary.numeric import (
+    parse_numeric_constant_instruction,
+)
 from wasm.exceptions import (
     MalformedModule,
 )
 from wasm.opcodes import (
     BinaryOpcode,
-)
-from wasm.binary.numeric import (
-    parse_numeric_constant_instruction,
 )
 
 

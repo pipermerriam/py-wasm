@@ -1,7 +1,8 @@
 import pytest
 
-from wasm.datatypes import ValType
-
+from wasm.datatypes import (
+    ValType,
+)
 
 i32 = ValType.i32
 i64 = ValType.i64

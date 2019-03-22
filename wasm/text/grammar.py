@@ -1,6 +1,5 @@
 import parsimonious
 
-
 UNTESTED = """
 script = open (_ cmd)* close
 

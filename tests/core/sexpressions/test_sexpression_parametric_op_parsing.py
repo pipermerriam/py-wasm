@@ -1,9 +1,11 @@
 import pytest
 
-from wasm.text import parse
 from wasm.instructions.parametric import (
     Drop,
     Select,
+)
+from wasm.text import (
+    parse,
 )
 
 

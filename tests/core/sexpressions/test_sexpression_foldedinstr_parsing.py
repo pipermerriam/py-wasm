@@ -1,16 +1,21 @@
+import numpy
 import pytest
 
-import numpy
-
-from wasm.text import parse
-from wasm.datatypes import LocalIdx
-from wasm.opcodes import BinaryOpcode
-from wasm.instructions.variable import (
-    LocalOp,
+from wasm.datatypes import (
+    LocalIdx,
 )
 from wasm.instructions.numeric import (
     BinOp,
     I32Const,
+)
+from wasm.instructions.variable import (
+    LocalOp,
+)
+from wasm.opcodes import (
+    BinaryOpcode,
+)
+from wasm.text import (
+    parse,
 )
 
 

@@ -2,9 +2,6 @@ import io
 
 import pytest
 
-from wasm.exceptions import (
-    MalformedModule,
-)
 from wasm.binary.integers import (
     parse_i32,
     parse_i64,
@@ -12,6 +9,9 @@ from wasm.binary.integers import (
     parse_s64,
     parse_u32,
     parse_u64,
+)
+from wasm.exceptions import (
+    MalformedModule,
 )
 
 

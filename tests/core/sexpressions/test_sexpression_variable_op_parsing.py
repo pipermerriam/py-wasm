@@ -1,15 +1,21 @@
 import pytest
 
-from wasm.text.ir import UnresolvedVariableOp, UnresolvedLocalIdx, UnresolvedGlobalIdx
 from wasm.datatypes import (
-    LocalIdx,
     GlobalIdx,
+    LocalIdx,
 )
 from wasm.instructions.variable import (
-    LocalOp,
     GlobalOp,
+    LocalOp,
 )
-from wasm.opcodes import BinaryOpcode
+from wasm.opcodes import (
+    BinaryOpcode,
+)
+from wasm.text.ir import (
+    UnresolvedGlobalIdx,
+    UnresolvedLocalIdx,
+    UnresolvedVariableOp,
+)
 
 
 @pytest.mark.parametrize(

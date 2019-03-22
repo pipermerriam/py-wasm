@@ -1,10 +1,15 @@
+import numpy
 import pytest
 
-import numpy
-
-from wasm.text import parse
-from wasm.instructions.control import Return
-from wasm.instructions.numeric import I32Const
+from wasm.instructions.control import (
+    Return,
+)
+from wasm.instructions.numeric import (
+    I32Const,
+)
+from wasm.text import (
+    parse,
+)
 
 
 @pytest.mark.parametrize(

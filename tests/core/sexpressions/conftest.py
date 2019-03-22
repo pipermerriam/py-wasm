@@ -1,11 +1,14 @@
+from lark import Lark
 import pytest
 
-from lark import Lark
-
-from wasm.text import parser
-from wasm.text.transformer import WasmTransformer
+from wasm.text import (
+    parser,
+)
 from wasm.text.lark import (
     GRAMMAR,
+)
+from wasm.text.transformer import (
+    WasmTransformer,
 )
 
 

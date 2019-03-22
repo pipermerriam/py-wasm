@@ -1,20 +1,22 @@
 import pytest
 
-from wasm.text import parse
+from wasm.datatypes import (
+    FunctionIdx,
+    ValType,
+)
 from wasm.instructions.control import (
     Call,
 )
-from wasm.datatypes import (
-    ValType,
-    FunctionIdx,
+from wasm.text import (
+    parse,
 )
 from wasm.text.ir import (
     Param,
-    UnresolvedFunctionType,
-    UnresolvedCallIndirect,
-    UnresolvedTypeIdx,
-    UnresolvedFunctionIdx,
     UnresolvedCall,
+    UnresolvedCallIndirect,
+    UnresolvedFunctionIdx,
+    UnresolvedFunctionType,
+    UnresolvedTypeIdx,
 )
 
 i32 = ValType.i32

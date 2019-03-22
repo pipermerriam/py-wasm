@@ -3,19 +3,19 @@ from typing import (
     NamedTuple,
     Optional,
     Tuple,
-    Union,
-    TypeVar,
     Type,
+    TypeVar,
+    Union,
 )
 
 from wasm.datatypes import (
-    ValType,
     LabelIdx,
+    ValType,
 )
 from wasm.instructions.control import (
     Block,
-    Loop,
     If,
+    Loop,
 )
 from wasm.opcodes import (
     BinaryOpcode,
@@ -82,6 +82,16 @@ class UnresolvedFunctionIdx(NamedTuple):
 
 
 @register
+class UnresolvedTableIdx(NamedTuple):
+    name: str
+
+
+@register
+class UnresolvedMemoryIdx(NamedTuple):
+    name: str
+
+
+@register
 class UnresolvedVariableOp(NamedTuple):
     opcode: BinaryOpcode
     name: UnresolvedLocalIdx
@@ -129,3 +139,9 @@ class NamedLoop(NamedTuple):
 class NamedIf(NamedTuple):
     name: str
     loop: If
+
+
+@register
+class UnresolvedExport(NamedTuple):
+    name: str
+    function_idx: UnresolvedFunctionIdx

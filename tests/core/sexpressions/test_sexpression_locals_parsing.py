@@ -1,8 +1,11 @@
 import pytest
 
-from wasm.text.ir import Local
-from wasm.datatypes import ValType
-
+from wasm.datatypes import (
+    ValType,
+)
+from wasm.text.ir import (
+    Local,
+)
 
 PARSE_START = 'locals'
 

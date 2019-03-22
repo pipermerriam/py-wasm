@@ -9,14 +9,14 @@ from wasm._utils.decorators import (
     to_tuple,
 )
 from wasm._utils.toolz import (
-    cons,
     concatv,
+    cons,
 )
 from wasm.datatypes import (
-    TypeIdx,
-    LabelIdx,
-    ValType,
     FunctionIdx,
+    LabelIdx,
+    TypeIdx,
+    ValType,
 )
 from wasm.exceptions import (
     ParseError,
@@ -25,68 +25,70 @@ from wasm.instructions import (
     BaseInstruction,
 )
 from wasm.instructions.control import (
-    Call,
-    Return,
+    Block,
     Br,
     BrIf,
     BrTable,
-    Nop,
-    Unreachable,
-    Block,
+    Call,
     If,
+    Nop,
+    Return,
+    Unreachable,
 )
-from wasm.instructions.variable import (
-    LocalOp,
-    GlobalOp,
+from wasm.instructions.memory import (
+    MemoryArg,
+    MemoryGrow,
+    MemoryOp,
+    MemorySize,
+)
+from wasm.instructions.numeric import (
+    BinOp,
+    Convert,
+    Demote,
+    Extend,
+    F32Const,
+    F64Const,
+    I32Const,
+    I64Const,
+    Promote,
+    Reinterpret,
+    RelOp,
+    TestOp,
+    Truncate,
+    UnOp,
+    Wrap,
 )
 from wasm.instructions.parametric import (
     Drop,
     Select,
 )
-from wasm.instructions.numeric import (
-    Reinterpret,
-    Demote,
-    Promote,
-    Convert,
-    I32Const,
-    UnOp,
-    BinOp,
-    I64Const,
-    F32Const,
-    F64Const,
-    RelOp,
-    TestOp,
-    Wrap,
-    Extend,
-    Truncate,
-)
-from wasm.instructions.memory import (
-    MemoryArg,
-    MemoryOp,
-    MemorySize,
-    MemoryGrow,
+from wasm.instructions.variable import (
+    GlobalOp,
+    LocalOp,
 )
 from wasm.opcodes import (
-    BinaryOpcode,
     TEXT_TO_OPCODE,
+    BinaryOpcode,
 )
 
-from .grammar import GRAMMAR
+from .grammar import (
+    GRAMMAR,
+)
 from .ir import (
     BaseUnresolved,
-    NamedBlock,
     Local,
+    NamedBlock,
     Param,
-    UnresolvedCall,
-    UnresolvedVariableOp,
-    UnresolvedCallIndirect,
-    UnresolvedTypeIdx,
-    UnresolvedFunctionIdx,
-    UnresolvedFunctionType,
     UnresolvedBr,
     UnresolvedBrIf,
     UnresolvedBrTable,
+    UnresolvedCall,
+    UnresolvedCallIndirect,
+    UnresolvedFunctionIdx,
+    UnresolvedFunctionType,
     UnresolvedLabelIdx,
+    UnresolvedTypeIdx,
+    UnresolvedVariableOp,
 )
 
 

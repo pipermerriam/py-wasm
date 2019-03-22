@@ -1,23 +1,25 @@
 import pytest
 
-from wasm.instructions.numeric import (
-    Reinterpret,
-    Demote,
-    Promote,
-    Convert,
-    TestOp as _TestOp,  # pytest tries to collect it otherwise
+from wasm.instructions.numeric import (  # pytest tries to collect it otherwise
     BinOp,
-    I32Const,
-    I64Const,
+    Convert,
+    Demote,
+    Extend,
     F32Const,
     F64Const,
+    I32Const,
+    I64Const,
+    Promote,
+    Reinterpret,
     RelOp,
-    Wrap,
-    UnOp,
-    Extend,
+    TestOp as _TestOp,
     Truncate,
+    UnOp,
+    Wrap,
 )
-from wasm.opcodes import BinaryOpcode
+from wasm.opcodes import (
+    BinaryOpcode,
+)
 
 
 @pytest.mark.parametrize(

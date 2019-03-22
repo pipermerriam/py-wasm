@@ -1,4 +1,6 @@
-from pathlib import Path
+from pathlib import (
+    Path,
+)
 from typing import (
     Tuple,
 )
@@ -6,7 +8,6 @@ from typing import (
 from wasm.text.grammar import (
     parse,
 )
-
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 FIXTURES_DIR = BASE_DIR / "spec" / "test" / "core"

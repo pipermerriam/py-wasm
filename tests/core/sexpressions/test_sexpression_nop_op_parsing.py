@@ -1,7 +1,7 @@
 import pytest
 
 from wasm.instructions.control import (
-    Nop
+    Nop,
 )
 
 

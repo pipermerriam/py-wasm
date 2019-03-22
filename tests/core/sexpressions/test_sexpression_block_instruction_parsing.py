@@ -1,10 +1,9 @@
+import numpy
 import pytest
 
-import numpy
-
-from wasm.text import parse
-from wasm.datatypes import ValType
-from wasm.opcodes import BinaryOpcode
+from wasm.datatypes import (
+    ValType,
+)
 from wasm.instructions.control import (
     Block,
     End,
@@ -12,11 +11,20 @@ from wasm.instructions.control import (
     Return,
 )
 from wasm.instructions.numeric import (
-    UnOp,
     I32Const,
+    UnOp,
 )
-from wasm.text.ir import NamedBlock, UnresolvedCall, UnresolvedFunctionIdx
-
+from wasm.opcodes import (
+    BinaryOpcode,
+)
+from wasm.text import (
+    parse,
+)
+from wasm.text.ir import (
+    NamedBlock,
+    UnresolvedCall,
+    UnresolvedFunctionIdx,
+)
 
 i32 = ValType.i32
 

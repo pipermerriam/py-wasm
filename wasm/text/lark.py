@@ -288,15 +288,16 @@ _THEN: "then"
 _ELSE: "else"
 
 folded_else: _open _ELSE block_instrs _close
-?folded_then: _open _THEN block_instrs _close
+folded_then: _open _THEN block_instrs _close
 
-?then_tail: _ws folded_then folded_else?
+then_tail: _ws folded_then (_ws folded_else)?
 
 folded_if_tail_with_result: block_type+ (_ws expr)+ then_tail
 folded_if_tail_no_result: (_ws expr)+ then_tail
-folded_if_named: _IF block_name (folded_if_tail_no_result | folded_if_tail_with_result)
-?folded_if_anon: _IF (folded_if_tail_no_result | folded_if_tail_with_result)
-folded_if: folded_if_named | folded_if_anon
+folded_if_tail: folded_if_tail_no_result | folded_if_tail_with_result
+folded_if_named: _IF block_name folded_if_tail
+folded_if_anon: _IF folded_if_tail
+?folded_if: folded_if_named | folded_if_anon
 
 else_tail_named: _ws _ELSE block_name block_instrs
 else_tail_anon: _ws _ELSE block_instrs

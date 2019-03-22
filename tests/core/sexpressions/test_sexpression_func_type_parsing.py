@@ -36,8 +36,6 @@ PARSE_START = 'func_type'
                 (),
             ),
         ),
-
-        # ("(func (result i32) (unreachable))  # TODO: this is not a raw functype but rather a `function` definition.
     ),
 )
 def test_sexpression_parametric_instruction_parsing(sexpr, expected, parse):

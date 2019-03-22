@@ -15,6 +15,7 @@ from wasm.datatypes import (
 from wasm.instructions.control import (
     Block,
     Loop,
+    If,
 )
 from wasm.opcodes import (
     BinaryOpcode,
@@ -122,3 +123,9 @@ class NamedBlock(NamedTuple):
 class NamedLoop(NamedTuple):
     name: str
     loop: Loop
+
+
+@register
+class NamedIf(NamedTuple):
+    name: str
+    loop: If

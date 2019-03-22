@@ -66,6 +66,7 @@ from wasm.instructions.numeric import (
 from .ir import (
     NamedLoop,
     NamedBlock,
+    NamedIf,
     BaseUnresolved,
     Local,
     Param,
@@ -204,24 +205,47 @@ class WasmTransformer(Transformer):
         return Loop(block_type, instructions)
 
     @v_args(inline=True)
-    def folded_if(self, args):
-        if len(args) == 3:
-            prefix_exprs, block_type, instructions = args
-            if_instruction = If(block_type, instructions, ())
-            return prefix_exprs + (if_instruction,)
-        else:
-            assert False
+    def folded_if_tail(self, if_params):
+        prefix_exprs, block_type, (instructions, else_instructions) = if_params
+        if_instruction = If(block_type, instructions, else_instructions)
+        return prefix_exprs, if_instruction
+
+    @v_args(inline=True)
+    def folded_if_named(self, name, prefix_and_instruction):
+        prefix_exprs, if_instruction = prefix_and_instruction
+        named_instruction = NamedIf(name, if_instruction)
+        return prefix_exprs + (named_instruction,)
+
+    @v_args(inline=True)
+    def folded_if_anon(self, prefix_and_instruction):
+        prefix_exprs, if_instruction = prefix_and_instruction
+        return prefix_exprs + (if_instruction,)
 
     @v_args(inline=True)
     def folded_if_tail_no_result(self, exprs, instructions):
         prefix_exprs = normalize_expressions(exprs)
         return prefix_exprs, (), instructions
 
-    def then_tail_with_result(self, args):
-        assert False
+    @v_args(inline=True)
+    def then_tail(self, instructions, else_instructions=None):
+        if not else_instructions:
+            return instructions + End.as_tail(), ()
+        else:
+            return (instructions, else_instructions + End.as_tail())
 
-    def folded_else(self, args):
-        assert False
+    @v_args(inline=True)
+    def folded_then(self, instructions):
+        if instructions == End.as_tail():
+            return ()
+        else:
+            return instructions
+
+    @v_args(inline=True)
+    def folded_else(self, else_instructions):
+        if else_instructions == End.as_tail():
+            return ()
+        else:
+            return else_instructions
 
     @v_args(inline=True)
     def block_tail_with_result(self, block_type, instructions):

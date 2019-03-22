@@ -1,6 +1,5 @@
 import pytest
 
-from wasm.text.lark import parser
 from wasm.text.ir import UnresolvedVariableOp, UnresolvedLocalIdx, UnresolvedGlobalIdx
 from wasm.datatypes import (
     LocalIdx,
@@ -28,6 +27,6 @@ from wasm.opcodes import BinaryOpcode
         ("(global.set 1)", GlobalOp.from_opcode(BinaryOpcode.SET_GLOBAL, GlobalIdx(1))),
     ),
 )
-def test_sexpression_local_variable_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_local_variable_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected

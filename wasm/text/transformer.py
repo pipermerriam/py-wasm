@@ -1,5 +1,8 @@
 from lark import Transformer, v_args, Tree, Token
 
+from wasm._utils.decorators import (
+    to_tuple,
+)
 from wasm._utils.toolz import (
     concat,
 )
@@ -12,14 +15,25 @@ from wasm.datatypes import (
     FunctionIdx,
     LabelIdx,
 )
+from wasm.instructions import (
+    BaseInstruction,
+)
 from wasm.instructions.control import (
+    Block,
     Unreachable,
     Return,
+    End,
     Nop,
     Call,
+    If,
     Br,
     BrIf,
     BrTable,
+    Loop,
+)
+from wasm.instructions.parametric import (
+    Drop,
+    Select,
 )
 from wasm.instructions.variable import (
     LocalOp,
@@ -50,6 +64,8 @@ from wasm.instructions.numeric import (
 )
 
 from .ir import (
+    NamedLoop,
+    NamedBlock,
     BaseUnresolved,
     Local,
     Param,
@@ -128,17 +144,103 @@ MEMORY_ARG_DEFAULTS = {
 }
 
 
+@to_tuple
+def normalize_expressions(expressions):
+    if isinstance(expressions, (BaseUnresolved, BaseInstruction)):
+        yield expressions
+    else:
+        for expr in expressions:
+            if isinstance(expr, (BaseUnresolved, BaseInstruction)):
+                yield expr
+            elif isinstance(expr, tuple):
+                yield from normalize_expressions(expr)
+            else:
+                raise Exception("INVALID")
+
+
 class WasmTransformer(Transformer):
     #
     # Expressions
     #
+    def exprs(self, exprs):
+        return normalize_expressions(exprs)
+
     @v_args(inline=True)
-    def exprs(self, args):
-        return tuple(args.children)
+    def expr(self, expr):
+        return expr
+
+    @v_args(inline=True)
+    def folded_op(self, op, exprs):
+        if isinstance(exprs, (BaseInstruction, BaseInstruction)):
+            return (exprs, op)
+        elif isinstance(exprs, tuple):
+            return exprs + (op,)
+        else:
+            raise Exception("INVALID")
 
     #
-    # Instructions
+    # Block Instructions
     #
+    @v_args(inline=True)
+    def block_body_named(self, name, block_params):
+        block_type, instructions = block_params
+        block = Block(block_type, instructions)
+        return NamedBlock(name, block)
+
+    @v_args(inline=True)
+    def block_body_anon(self, block_params):
+        block_type, instructions = block_params
+        return Block(block_type, instructions)
+
+    @v_args(inline=True)
+    def loop_body_named(self, name, loop_params):
+        block_type, instructions = loop_params
+        loop = Loop(block_type, instructions)
+        return NamedLoop(name, loop)
+
+    @v_args(inline=True)
+    def loop_body_anon(self, loop_params):
+        block_type, instructions = loop_params
+        return Loop(block_type, instructions)
+
+    @v_args(inline=True)
+    def folded_if(self, args):
+        if len(args) == 3:
+            prefix_exprs, block_type, instructions = args
+            if_instruction = If(block_type, instructions, ())
+            return prefix_exprs + (if_instruction,)
+        else:
+            assert False
+
+    @v_args(inline=True)
+    def folded_if_tail_no_result(self, exprs, instructions):
+        prefix_exprs = normalize_expressions(exprs)
+        return prefix_exprs, (), instructions
+
+    def then_tail_with_result(self, args):
+        assert False
+
+    def folded_else(self, args):
+        assert False
+
+    @v_args(inline=True)
+    def block_tail_with_result(self, block_type, instructions):
+        return block_type, instructions
+
+    @v_args(inline=True)
+    def block_tail_no_result(self, instructions):
+        return (), instructions
+
+    @v_args(inline=True)
+    def block_name(self, token):
+        return token.value
+
+    def block_instrs(self, args):
+        if args:
+            return normalize_expressions(tuple(concat(tree.children for tree in args)))
+        else:
+            return End.as_tail()
+
     #
     # Control Ops
     #
@@ -210,6 +312,18 @@ class WasmTransformer(Transformer):
         return Return()
 
     @v_args(inline=True)
+    def end_op(self):
+        return End()
+
+    @v_args(inline=True)
+    def typeuse(self, typeuse):
+        if isinstance(typeuse, (TypeIdx, UnresolvedFunctionType, UnresolvedTypeIdx)):
+            return typeuse
+
+        params, results = typeuse
+        return UnresolvedFunctionType(params, results)
+
+    @v_args(inline=True)
     def typeuse_params_only(self, *params):
         return tuple(concat(params)), ()
 
@@ -223,6 +337,17 @@ class WasmTransformer(Transformer):
         results = tuple(value for value in params_and_results if isinstance(value, ValType))
         assert len(params_and_results) == len(params) + len(results)
         return params, results
+
+    #
+    # Parametric Ops
+    #
+    @v_args(inline=True)
+    def drop_op(self):
+        return Drop()
+
+    @v_args(inline=True)
+    def select_op(self):
+        return Select()
 
     #
     # Variable Ops

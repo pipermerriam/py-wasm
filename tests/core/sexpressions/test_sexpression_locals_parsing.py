@@ -1,8 +1,10 @@
 import pytest
 
-from wasm.text.lark import parser
 from wasm.text.ir import Local
 from wasm.datatypes import ValType
+
+
+PARSE_START = 'locals'
 
 
 i32 = ValType.i32
@@ -28,6 +30,6 @@ f64 = ValType.f64
         ('(local f32 f64)\n(local $i i32)', (Local(f32), Local(f64), Local(i32, '$i'))),
     ),
 )
-def test_sexpression_locals_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_locals_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected

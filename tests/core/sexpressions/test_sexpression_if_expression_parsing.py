@@ -22,7 +22,7 @@ from wasm.instructions.variable import (
                 LocalOp.from_opcode(BinaryOpcode.GET_LOCAL, LocalIdx(0)),
                 If(
                     result_type=(),
-                    instructions=(),
+                    instructions=End.as_tail(),
                     else_instructions=(),
                 ),
             ),

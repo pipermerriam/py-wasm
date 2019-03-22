@@ -1,6 +1,5 @@
 import pytest
 
-from wasm.text.lark import parser
 from wasm.instructions.control import (
     Nop
 )
@@ -12,6 +11,6 @@ from wasm.instructions.control import (
         ("(nop)", Nop()),
     ),
 )
-def test_sexpression_nop_instructions_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_nop_instructions_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected

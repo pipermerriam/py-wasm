@@ -1,6 +1,5 @@
 import pytest
 
-from wasm.text.lark import parser
 from wasm.instructions.numeric import (
     Reinterpret,
     Demote,
@@ -31,8 +30,8 @@ from wasm.opcodes import BinaryOpcode
         ('(f64.const 1234)', F64Const(1234)),
     ),
 )
-def test_sexpression_numeric_constant_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_numeric_constant_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -56,8 +55,8 @@ OP_PAIRS = (
         for op in ops
     ),
 )
-def test_sexpression_unop_binop_relop_testop_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_unop_binop_relop_testop_instruction_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -69,8 +68,8 @@ def test_sexpression_unop_binop_relop_testop_instruction_parsing(sexpr, expected
         ('(i64.extend_i32_u)', Extend.from_opcode(BinaryOpcode.I64_EXTEND_U_I32)),
     ),
 )
-def test_sexpression_wrap_and_extend_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_wrap_and_extend_instruction_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -87,8 +86,8 @@ def test_sexpression_wrap_and_extend_instruction_parsing(sexpr, expected):
         ('(i64.trunc_f64_u)', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_U_F64)),
     )
 )
-def test_sexpression_trunc_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_trunc_instruction_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -105,8 +104,8 @@ def test_sexpression_trunc_instruction_parsing(sexpr, expected):
         ('(f64.convert_i64_u)', Convert.from_opcode(BinaryOpcode.F64_CONVERT_U_I64)),
     )
 )
-def test_sexpression_convert_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_convert_instruction_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -117,8 +116,8 @@ def test_sexpression_convert_instruction_parsing(sexpr, expected):
         ('(f64.promote_f32)', Promote()),
     ),
 )
-def test_sexpression_demote_and_promote_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_demote_and_promote_instruction_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -131,6 +130,6 @@ def test_sexpression_demote_and_promote_instruction_parsing(sexpr, expected):
         ('(f64.reinterpret_i64)', Reinterpret.from_opcode(BinaryOpcode.F64_REINTERPRET_I64)),
     )
 )
-def test_sexpression_reinterpret_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_reinterpret_instruction_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected

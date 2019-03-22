@@ -1,6 +1,5 @@
 import pytest
 
-from wasm.text.lark import parser
 from wasm.instructions.memory import (
     MemoryArg,
     MemoryOp,
@@ -38,8 +37,8 @@ from wasm.opcodes import BinaryOpcode
         ("(i64.store32)", MemoryOp.from_opcode(BinaryOpcode.I64_STORE32, MemoryArg(0, 4))),
     ),
 )
-def test_sexpression_memory_load_and_store_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_memory_load_and_store_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -50,6 +49,6 @@ def test_sexpression_memory_load_and_store_parsing(sexpr, expected):
         ("(memory.grow)", MemoryGrow()),
     ),
 )
-def test_sexpression_memory_size_and_grow_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_memory_size_and_grow_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected

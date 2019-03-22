@@ -1,10 +1,10 @@
-from .visitor import (
-    NodeVisitor,
-)
-from .grammar import (  # noqa: F401
+from lark import Lark
+
+from .transformer import WasmTransformer
+from .lark import (
     GRAMMAR,
 )
 
 
-visitor = NodeVisitor()
-parse = visitor.parse
+parser = Lark(GRAMMAR, parser="lalr", transformer=WasmTransformer())
+parse = parser.parse

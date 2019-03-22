@@ -1,11 +1,12 @@
 import pytest
 
-from wasm.text.lark import parser
 from wasm.datatypes import ValType
 
 
 i32 = ValType.i32
 i64 = ValType.i64
+
+PARSE_START = 'results'
 
 
 @pytest.mark.parametrize(
@@ -19,6 +20,6 @@ i64 = ValType.i64
         ('(result i32) (result i64)', (i32, i64)),
     ),
 )
-def test_sexpression_results_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+def test_sexpression_results_parsing(sexpr, expected, parse):
+    actual = parse(sexpr)
     assert actual == expected

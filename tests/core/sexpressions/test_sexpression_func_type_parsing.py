@@ -1,6 +1,5 @@
 import pytest
 
-from wasm.text import GRAMMAR
 from wasm.datatypes import (
     ValType,
 )
@@ -15,7 +14,7 @@ f32 = ValType.f32
 f64 = ValType.f64
 
 
-grammar = GRAMMAR['func_type']
+PARSE_START = 'func_type'
 
 
 @pytest.mark.parametrize(

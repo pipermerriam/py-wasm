@@ -36,38 +36,54 @@ def stringify_instructions(instructions: Sequence['Instruction']) -> str:
     return ' > '.join(map(str, instructions))
 
 
-@register
-class Block(NamedTuple):
-    result_type: Tuple[ValType, ...]
-    instructions: Tuple[BaseInstruction, ...]
-
-    @property
-    def opcode(self) -> BinaryOpcode:
-        return BinaryOpcode.BLOCK
+class BaseBlockInstruction:
+    def __init__(self,
+                 result_type: Tuple[ValType, ...],
+                 instructions: Tuple[BaseInstruction, ...]) -> None:
+        self.result_type = result_type
+        self.instructions = instructions
 
     def __str__(self) -> str:
         rt = f"({','.join((str(v) for v in self.result_type))})"
         return f"{self.opcode.text}[rt={rt},expr={stringify_instructions(self.instructions)}]"
 
+    def __repr__(self) -> str:
+        return f"<{self.opcode.text}: {str(self)}>"
+
+    def __eq__(self, other: Any) -> bool:
+        if type(self) is not type(other):
+            return False
+        elif self.result_type != other.result_type:
+            return False
+        elif self.instructions != other.instructions:
+            return False
+        else:
+            return True
+
+
+@register
+class Block(BaseBlockInstruction):
+    opcode = BinaryOpcode.BLOCK
+
     @classmethod
     def wrap(cls,
              result_type: Tuple[ValType, ...],
-             expression: Tuple[BaseInstruction, ...]
+             instructions: Tuple[BaseInstruction, ...]
              ) -> Tuple[BaseInstruction, ...]:
         return cast(Tuple[BaseInstruction, ...], (
             cls(
                 result_type,
-                expression,
+                instructions,
             ),
         ))
 
     @classmethod
     def wrap_with_end(cls,
                       result_type: Tuple[ValType, ...],
-                      expression: Tuple[BaseInstruction, ...]
+                      instructions: Tuple[BaseInstruction, ...]
                       ) -> Tuple[BaseInstruction, ...]:
-        wrapped_expression = cls.wrap(result_type, expression)
-        return cast(Tuple[BaseInstruction, ...], wrapped_expression + End.as_tail())
+        expression = cls(result_type, instructions)
+        return cast(Tuple[BaseInstruction, ...], expression + End.as_tail())
 
 
 @register
@@ -128,28 +144,21 @@ class BrIf(Interned):
 
 
 @register
-class Loop(NamedTuple):
-    result_type: Tuple[ValType, ...]
-    instructions: Tuple[BaseInstruction, ...]
-
-    @property
-    def opcode(self) -> BinaryOpcode:
-        return BinaryOpcode.LOOP
-
-    def __str__(self) -> str:
-        rt = f"({','.join((v.value for v in self.result_type))})"
-        return f"{self.opcode.text}[rt={rt},expr={self.instructions}]"
+class Loop(BaseBlockInstruction):
+    opcode = BinaryOpcode.LOOP
 
 
 @register
-class If(NamedTuple):
-    result_type: Tuple[ValType, ...]
-    instructions: Tuple[BaseInstruction, ...]
-    else_instructions: Tuple[BaseInstruction, ...]
+class If:
+    opcode = BinaryOpcode.IF
 
-    @property
-    def opcode(self) -> BinaryOpcode:
-        return BinaryOpcode.IF
+    def __init__(self,
+                 result_type: Tuple[ValType, ...],
+                 instructions: Tuple[BaseInstruction, ...],
+                 else_instructions: Tuple[BaseInstruction, ...]) -> None:
+        self.result_type = result_type
+        self.instructions = instructions
+        self.else_instructions = else_instructions
 
     def __str__(self) -> str:
         rt = f"({','.join((v.value for v in self.result_type))})"
@@ -162,6 +171,21 @@ class If(NamedTuple):
             )
         else:
             return f"{self.opcode.text}[rt={rt},main={self.instructions}]"
+
+    def __repr__(self) -> str:
+        return f"<IF: {str(self)}>"
+
+    def __eq__(self, other: Any) -> bool:
+        if type(self) is not type(other):
+            return False
+        elif self.result_type != other.result_type:
+            return False
+        elif self.instructions != other.instructions:
+            return False
+        elif self.else_instructions != other.else_instructions:
+            return False
+        else:
+            return True
 
 
 @register

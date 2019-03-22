@@ -10,7 +10,7 @@ from wasm.instructions.numeric import I32Const
 @pytest.mark.parametrize(
     'sexpr,expected',
     (
-        ("(return)", (Return(),)),
+        ("(return)", Return()),
         ("(return (i32.const 1))", (I32Const(numpy.uint32(1)), Return())),
     ),
 )

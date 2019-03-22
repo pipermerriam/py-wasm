@@ -1,6 +1,6 @@
 import pytest
 
-from wasm.text.lark import parser
+from wasm.text import parse
 from wasm.instructions.control import (
     Call,
 )
@@ -34,7 +34,7 @@ pf64 = Param(f64)
     ),
 )
 def test_sexpression_call_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+    actual = parse(sexpr)
     assert actual == expected
 
 
@@ -65,5 +65,5 @@ def test_sexpression_call_instruction_parsing(sexpr, expected):
     ),
 )
 def test_sexpression_call_indirect_instruction_parsing(sexpr, expected):
-    actual = parser.parse(sexpr)
+    actual = parse(sexpr)
     assert actual == expected

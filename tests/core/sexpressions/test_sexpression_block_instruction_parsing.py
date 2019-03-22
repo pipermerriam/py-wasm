@@ -50,5 +50,5 @@ i32 = ValType.i32
     ),
 )
 def test_sexpression_block_instructions_parsing(sexpr, expected):
-    actual, = parse(sexpr)
+    actual = parse(sexpr)
     assert actual == expected

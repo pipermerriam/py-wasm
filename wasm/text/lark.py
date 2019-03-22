@@ -1,7 +1,3 @@
-from lark import Lark
-
-from .transformer import WasmTransformer
-
 GRAMMAR = r"""
 _WHITESPACE: (" " | /\n/ | /\t/)+
 
@@ -211,11 +207,11 @@ _global_variable_op: (GLOBAL_GET | GLOBAL_SET) _ws globalidx
 
 variable_op: _local_variable_op | _global_variable_op
 
-DROP: "drop"
-SELECT: "select"
+_DROP: "drop"
+_SELECT: "select"
 
-drop_op: DROP
-select_op: SELECT
+drop_op: _DROP
+select_op: _SELECT
 
 ?parametric_op: drop_op | select_op
 
@@ -225,11 +221,11 @@ typeidx: _var
 
 _typeuse_direct: _open _TYPE _ws typeidx _close
 typeuse_params_and_results: (_ws param)* (_ws result)*
-?typeuse: _ws _typeuse_direct | typeuse_params_and_results
+typeuse: _ws _typeuse_direct | typeuse_params_and_results
 
-FUNC: "func"
+_FUNC: "func"
 
-func_type: _open FUNC typeuse _close
+?func_type: _open _FUNC typeuse _close
 
 _CALL:          "call"
 _CALL_INDIRECT: "call_indirect"
@@ -263,11 +259,66 @@ end_op:         _END
 
 ?op: numeric_op | memory_op | variable_op | parametric_op | control_op
 
-?expr: _open op _close
+block_name: _ws name
+?block_type: _ws result
+block_instrs: (_ws instr)*
+block_tail_with_result: block_type+ block_instrs
+block_tail_no_result: block_instrs
+
+_BLOCK: "block"
+
+block_body_named: _BLOCK block_name (block_tail_no_result | block_tail_with_result)
+block_body_anon: _BLOCK (block_tail_no_result | block_tail_with_result)
+?block_body: block_body_named | block_body_anon
+block_instr_named: block_body_named _ws end_op block_name?
+block_instr_anon: block_body _ws end_op
+block_instr: block_instr_named | block_instr_anon
+
+_LOOP: "loop"
+
+loop_body_named: _LOOP block_name (block_tail_no_result | block_tail_with_result)
+loop_body_anon: _LOOP (block_tail_no_result | block_tail_with_result)
+?loop_body: loop_body_named | loop_body_anon
+loop_instr_named: loop_body_named _ws end_op block_name?
+loop_instr_anon: loop_body _ws end_op
+loop_instr: loop_instr_named | loop_instr_anon
+
+_IF: "if"
+_THEN: "then"
+_ELSE: "else"
+
+folded_else: _open _ELSE block_instrs _close
+?folded_then: _open _THEN block_instrs _close
+
+?then_tail: _ws folded_then folded_else?
+
+folded_if_tail_with_result: block_type+ (_ws expr)+ then_tail
+folded_if_tail_no_result: (_ws expr)+ then_tail
+folded_if_named: _IF block_name (folded_if_tail_no_result | folded_if_tail_with_result)
+?folded_if_anon: _IF (folded_if_tail_no_result | folded_if_tail_with_result)
+folded_if: folded_if_named | folded_if_anon
+
+else_tail_named: _ws _ELSE block_name block_instrs
+else_tail_anon: _ws _ELSE block_instrs
+
+if_body_named: _IF block_name (block_tail_no_result | block_tail_with_result)
+?if_body_anon: _IF (block_tail_no_result | block_tail_with_result)
+
+if_instr_named: if_body_named else_tail_named? _ws end_op block_name?
+if_instr_anon: if_body_anon else_tail_anon? _ws end_op
+
+if_instr: if_instr_named | if_instr_anon
+
+instr: op | block_instr | loop_instr | if_instr | expr
+_instrs_tail: _ws instr
+instrs: instr _instrs_tail*
+
+folded_op: op _ws exprs
+?inlined_folded_op: folded_op
+
+expr: _open (op | inlined_folded_op | block_body | loop_body | folded_if) _close
 _exprs_tail: _ws expr
 ?exprs: expr _exprs_tail*
 
-?start: exprs | locals | results | params
+?start: exprs
 """
-
-parser = Lark(GRAMMAR, parser="lalr", transformer=WasmTransformer())

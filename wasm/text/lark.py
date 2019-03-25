@@ -338,5 +338,14 @@ export: _open _EXPORT _ws string _ws (exfunc | exglobal | extable | exmemory) _c
 _exports_tail: _ws export
 ?exports: export _exports_tail*
 
-?start: exprs
+_IMPORT: "import"
+
+function_tail: func_type locals instrs
+function_declaration: _FUNC (_ws name)? (_ws function_tail)?
+function_inline_exports: _FUNC (_ws name)? (_ws _open _EXPORT _ws string _close)+ _ws function_tail
+function_inline_imports: _FUNC (_ws name)? (_ws _IMPORT (_ws string)+)+ _ws func_type
+
+?func: _open (function_declaration | function_inline_exports | function_inline_imports) _close
+
+?start: func
 """

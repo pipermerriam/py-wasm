@@ -96,6 +96,7 @@ from .ir import (
     UnresolvedTableIdx,
     UnresolvedTypeIdx,
     UnresolvedVariableOp,
+    UnresolvedFunction,
 )
 
 VARIABLE_LOOKUP = {
@@ -173,6 +174,14 @@ def normalize_expressions(expressions):
 
 
 class WasmTransformer(Transformer):
+    #
+    # Functions
+    #
+    @v_args(inline=True)
+    def function_declaration(self, *args):
+        assert not args
+        return UnresolvedFunction(type=None, locals=(), body=End.as_tail())
+
     #
     # Exports
     #

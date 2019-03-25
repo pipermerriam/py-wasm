@@ -145,3 +145,10 @@ class NamedIf(NamedTuple):
 class UnresolvedExport(NamedTuple):
     name: str
     function_idx: UnresolvedFunctionIdx
+
+
+@register
+class UnresolvedFunction(NamedTuple):
+    type: Union[None, UnresolvedTypeIdx, UnresolvedFunctionType]
+    locals: Tuple[ValType, ...]
+    body: Tuple['BaseInstruction', ...]

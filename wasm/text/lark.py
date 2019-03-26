@@ -38,7 +38,7 @@ _open:   _OPEN
 nat:    NAT
 int:    INT
 float:  FLOAT
-?name:   NAME
+name:   NAME
 string: _STRING_QUOTE STRING_CHAR* _STRING_QUOTE
 
 _value: int | float
@@ -64,8 +64,10 @@ valtypes: valtype _valtypes_tail*
 INTEGER_TYPES: I32 | I64
 FLOAT_TYPES:   F32 | F64
 
-local_named: "local" _ws name _ws valtype
-local_bare : "local" _ws        valtypes
+_LOCAL: "local"
+
+local_named: _LOCAL _ws name _ws valtype
+local_bare : _LOCAL (_ws        valtypes)?
 
 ?local: _open (local_named | local_bare) _close
 _locals_tail: _ws local
@@ -259,7 +261,7 @@ end_op:         _END
 
 ?op: numeric_op | memory_op | variable_op | parametric_op | control_op
 
-block_name: _ws name
+_block_name: _ws name
 ?block_type: _ws result
 block_instrs: (_ws instr)*
 block_tail_with_result: block_type+ block_instrs
@@ -267,19 +269,19 @@ block_tail_no_result: block_instrs
 
 _BLOCK: "block"
 
-block_body_named: _BLOCK block_name (block_tail_no_result | block_tail_with_result)
+block_body_named: _BLOCK _block_name (block_tail_no_result | block_tail_with_result)
 block_body_anon: _BLOCK (block_tail_no_result | block_tail_with_result)
 ?block_body: block_body_named | block_body_anon
-block_instr_named: block_body_named _ws end_op block_name?
+block_instr_named: block_body_named _ws end_op _block_name?
 block_instr_anon: block_body _ws end_op
 block_instr: block_instr_named | block_instr_anon
 
 _LOOP: "loop"
 
-loop_body_named: _LOOP block_name (block_tail_no_result | block_tail_with_result)
+loop_body_named: _LOOP _block_name (block_tail_no_result | block_tail_with_result)
 loop_body_anon: _LOOP (block_tail_no_result | block_tail_with_result)
 ?loop_body: loop_body_named | loop_body_anon
-loop_instr_named: loop_body_named _ws end_op block_name?
+loop_instr_named: loop_body_named _ws end_op _block_name?
 loop_instr_anon: loop_body _ws end_op
 loop_instr: loop_instr_named | loop_instr_anon
 
@@ -295,17 +297,17 @@ then_tail: _ws folded_then (_ws folded_else)?
 folded_if_tail_with_result: block_type+ (_ws expr)+ then_tail
 folded_if_tail_no_result: (_ws expr)+ then_tail
 folded_if_tail: folded_if_tail_no_result | folded_if_tail_with_result
-folded_if_named: _IF block_name folded_if_tail
+folded_if_named: _IF _block_name folded_if_tail
 folded_if_anon: _IF folded_if_tail
 ?folded_if: folded_if_named | folded_if_anon
 
-else_tail_named: _ws _ELSE block_name block_instrs
+else_tail_named: _ws _ELSE _block_name block_instrs
 else_tail_anon: _ws _ELSE block_instrs
 
-if_body_named: _IF block_name (block_tail_no_result | block_tail_with_result)
+if_body_named: _IF _block_name (block_tail_no_result | block_tail_with_result)
 ?if_body_anon: _IF (block_tail_no_result | block_tail_with_result)
 
-if_instr_named: if_body_named else_tail_named? _ws end_op block_name?
+if_instr_named: if_body_named else_tail_named? _ws end_op _block_name?
 if_instr_anon: if_body_anon else_tail_anon? _ws end_op
 
 if_instr: if_instr_named | if_instr_anon
@@ -340,8 +342,8 @@ _exports_tail: _ws export
 
 _IMPORT: "import"
 
-function_tail: func_type locals instrs
-function_declaration: _FUNC (_ws name)? (_ws function_tail)?
+function_tail: (_ws func_type)? (_ws locals)? (_ws instrs)?
+function_declaration: _FUNC (_ws name)? function_tail
 function_inline_exports: _FUNC (_ws name)? (_ws _open _EXPORT _ws string _close)+ _ws function_tail
 function_inline_imports: _FUNC (_ws name)? (_ws _IMPORT (_ws string)+)+ _ws func_type
 

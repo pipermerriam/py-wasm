@@ -1,15 +1,18 @@
 from lark import (
     Token,
-    Transformer,
+    InlineTransformer as Transformer,
     Tree,
     v_args,
+    Discard,
 )
 
 from wasm._utils.decorators import (
     to_tuple,
 )
 from wasm._utils.toolz import (
+    cons,
     concat,
+    concatv,
 )
 from wasm.datatypes import (
     Export,
@@ -173,14 +176,40 @@ def normalize_expressions(expressions):
                 raise Exception("INVALID")
 
 
+def _join_head_and_tail(head, tail):
+    if tail is None:
+        return (head,)
+    else:
+        return tuple(cons(head, tail))
+
+
 class WasmTransformer(Transformer):
     #
     # Functions
     #
     @v_args(inline=True)
-    def function_declaration(self, *args):
-        assert not args
-        return UnresolvedFunction(type=None, locals=(), body=End.as_tail())
+    def function_declaration(self, args):
+        if not args:
+            return UnresolvedFunction(type=None, locals=(), body=End.as_tail())
+        elif len(args) == 1:
+            assert isinstance(args[0], str)
+            name = args[0]
+            return UnresolvedFunction(
+                type=UnresolvedFunctionIdx(name),
+                locals=(),
+                body=End.as_tail(),
+            )
+        else:
+            raise Exception("INVALID")
+
+    @v_args(tree=True)
+    def function_tail(self, tree):
+        assert False
+        return (
+            UnresolvedFunctionType((), ()),
+            locals,
+            End.as_tail(),
+        )
 
     #
     # Exports
@@ -197,7 +226,7 @@ class WasmTransformer(Transformer):
     #
     # Expressions
     #
-    def exprs(self, exprs):
+    def exprs(self, *exprs):
         return normalize_expressions(exprs)
 
     @v_args(inline=True)
@@ -289,11 +318,7 @@ class WasmTransformer(Transformer):
     def block_tail_no_result(self, instructions):
         return (), instructions
 
-    @v_args(inline=True)
-    def block_name(self, token):
-        return token.value
-
-    def block_instrs(self, args):
+    def block_instrs(self, *args):
         if args:
             return normalize_expressions(tuple(concat(tree.children for tree in args)))
         else:
@@ -320,7 +345,7 @@ class WasmTransformer(Transformer):
         else:
             raise Exception("INVALID")
 
-    def br_table_op(self, all_label_indices):
+    def br_table_op(self, *all_label_indices):
         is_resolved = (
             all(isinstance(label_idx, int) for label_idx in all_label_indices)
         )
@@ -381,16 +406,8 @@ class WasmTransformer(Transformer):
         params, results = typeuse
         return UnresolvedFunctionType(params, results)
 
-    @v_args(inline=True)
-    def typeuse_params_only(self, *params):
-        return tuple(concat(params)), ()
-
-    @v_args(inline=True)
-    def typeuse_results_only(self, *results):
-        return (), tuple(concat(results))
-
-    def typeuse_params_and_results(self, raw_params_and_results):
-        params_and_results = tuple(concat(raw_params_and_results))
+    def typeuse_params_and_results(self, *raw_params_and_results):
+        params_and_results = tuple(filter(bool, concat(raw_params_and_results)))
         params = tuple(value for value in params_and_results if isinstance(value, Param))
         results = tuple(value for value in params_and_results if isinstance(value, ValType))
         assert len(params_and_results) == len(params) + len(results)
@@ -459,7 +476,7 @@ class WasmTransformer(Transformer):
             assert isinstance(memarg, MemoryArg)
         return MemoryOp.from_opcode(opcode, memarg)
 
-    def memory_arg(self, args):
+    def memory_arg(self, *args):
         if not args:
             return None
         else:
@@ -546,47 +563,54 @@ class WasmTransformer(Transformer):
     #
     # Params
     #
-    def params(self, args):
-        return tuple(concat(args))
+    def params(self, *params):
+        return tuple(concat(params))
 
-    def param_named(self, args):
-        name, valtype = args
+    def param_named(self, name, valtype):
         return (Param(valtype, name),)
 
-    def param_bare(self, valtypes):
-        return tuple(Param(valtype) for valtype in concat(valtypes))
+    def param_bare(self, *valtypes):
+        if not valtypes:
+            raise Discard()
+        else:
+            return tuple(Param(valtype) for valtype in concat(valtypes))
 
     #
     # Results
     #
-    def result(self, args):
-        return tuple(args)
+    def result(self, result=None):
+        if result is None:
+            raise Discard()
+        else:
+            return result
 
-    def results(self, args):
-        return tuple(concat(args))
+    def results(self, *results):
+        return tuple(concat(results))
 
     #
     # Locals
     #
-    def locals(self, args):
-        return tuple(concat(args))
+    def locals(self, *locals):
+        return tuple(concat(locals))
 
-    def local_named(self, args):
-        name, valtype = args
+    def local_named(self, name, valtype):
         return (Local(valtype, name),)
 
-    def local_bare(self, valtypes):
-        return tuple(Local(valtype) for valtype in concat(valtypes))
+    def local_bare(self, *valtypes):
+        if not valtypes:
+            raise Discard()
+        else:
+            return tuple(Local(valtype) for valtype in concat(valtypes))
 
     #
     # Index values
     #
     @v_args(inline=True)
-    def typeidx(self, token):
-        if isinstance(token.value, str):
-            return UnresolvedTypeIdx(token.value)
-        elif isinstance(token.value, int):
-            return TypeIdx(token.value)
+    def typeidx(self, var):
+        if isinstance(var, str):
+            return UnresolvedTypeIdx(var)
+        elif isinstance(var, int):
+            return TypeIdx(var)
         else:
             raise Exception("INVALID")
 
@@ -651,8 +675,8 @@ class WasmTransformer(Transformer):
     def valtype(self, valtype_token):
         return ValType.from_str(valtype_token.value)
 
-    def valtypes(self, args):
-        return tuple(args)
+    def valtypes(self, *valtypes):
+        return valtypes
 
     #
     # Basic values
@@ -685,4 +709,7 @@ class WasmTransformer(Transformer):
 
     @v_args(inline=True)
     def string(self, token):
+        return token.value
+
+    def name(self, token):
         return token.value

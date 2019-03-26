@@ -1,4 +1,5 @@
 import numpy
+import functools
 
 from lark import Lark
 
@@ -62,7 +63,7 @@ from wasm.instructions.numeric import (
     Wrap,
 )
 from wasm.text import (
-    parser as default_parser,
+    parse as default_parse,
 )
 from wasm.text.lark import (
     GRAMMAR,
@@ -96,16 +97,17 @@ from wasm.text.ir import (
 
 
 @memoize
-def _get_parser(start_rule):
+def _get_parse_fn(start_rule):
     if start_rule == 'start':
-        return default_parser
+        return default_parse
     else:
-        return Lark(
+        parser = Lark(
             GRAMMAR,
             parser="lalr",
-            transformer=WasmTransformer(),
             start=start_rule,
         )
+        transformer = WasmTransformer()
+        return functools.partial(default_parse, parser=parser, transformer=transformer)
 
 
 @to_tuple
@@ -187,10 +189,14 @@ SEXPRESSION_TESTS = tuple(concatv(
     with_start(
         'locals',
         # unnamed
+        ('(local)', ()),
+        ('(local) (local)', ()),
         ('(local i32)', (li32,)),
         ('(local i64)', (li64,)),
         ('(local f32)', (lf32,)),
         ('(local f64)', (lf64,)),
+        ('(local i32) (local i64)', (li32, li64)),
+        ('(local i32) (local) (local i64)', (li32, li64)),
         ('(local i32 i64)', (li32, li64)),
         ('(local f32 f64)', (lf32, lf64)),
         ('(local f32 f64 i32 i64)', (lf32, lf64, li32, li64)),
@@ -460,22 +466,21 @@ SEXPRESSION_TESTS = tuple(concatv(
     ),
     with_start(
         'func',
+    #    # function declarations
         ("(func)", UnresolvedFunction(type=None, locals=(), body=END_TAIL)),
+    #    ("(func $f)", UnresolvedFunction(type=UnresolvedFunctionIdx('$f'), locals=(), body=END_TAIL)),  # noqa: E501
+    #    ("(func (local))", UnresolvedFunction(type=None, locals=(), body=END_TAIL)),
+    #    # function declarations w/inline exports
+    #    # function imports
     ),
 ))
 
 
-def load_sexpression_tests(test_params):
-    for start_name, *params in test_params:
-        parser = _get_parser(start_name)
-        yield tuple(cons(parser.parse, params))
-
-
 def pytest_generate_tests(metafunc):
-    test_params = load_sexpression_tests(SEXPRESSION_TESTS)
-    metafunc.parametrize('parse,sexpr,expected', test_params)
+    metafunc.parametrize('start_name,sexpr,expected', SEXPRESSION_TESTS)
 
 
-def test_sexpression_parsing(parse, sexpr, expected):
+def test_sexpression_parsing(start_name, sexpr, expected):
+    parse = _get_parse_fn(start_name)
     actual = parse(sexpr)
     assert actual == expected

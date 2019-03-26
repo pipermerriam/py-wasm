@@ -11,6 +11,7 @@ from typing import (
 from wasm.datatypes import (
     LabelIdx,
     ValType,
+    Function,
 )
 from wasm.instructions.control import (
     Block,
@@ -26,15 +27,28 @@ class BaseUnresolved(ABC):
     pass
 
 
-TInstruction = TypeVar("TInstruction")
+class UnresolvedInstruction(BaseUnresolved):
+    pass
 
 
-def register(cls: Type[TInstruction]) -> Type[TInstruction]:
+TClass = TypeVar("TClass")
+
+
+def register(cls: Type[TClass]) -> Type[TClass]:
     """
     Class decorator which registeres the class with the `BaseUnresolved` base
     class.
     """
     BaseUnresolved.register(cls)
+    return cls
+
+
+def register_instruction(cls: Type[TClass]) -> Type[TClass]:
+    """
+    Class decorator which registeres the class with the `BaseUnresolved` base
+    class.
+    """
+    UnresolvedInstruction.register(cls)
     return cls
 
 
@@ -91,50 +105,59 @@ class UnresolvedMemoryIdx(NamedTuple):
     name: str
 
 
+@register_instruction
 @register
 class UnresolvedVariableOp(NamedTuple):
     opcode: BinaryOpcode
     name: UnresolvedLocalIdx
 
 
+@register_instruction
 @register
 class UnresolvedCall(NamedTuple):
     func_idx: UnresolvedFunctionIdx
 
 
+@register_instruction
 @register
 class UnresolvedCallIndirect(NamedTuple):
     type_idx: Union[UnresolvedFunctionType, UnresolvedTypeIdx]
 
 
+@register_instruction
 @register
 class UnresolvedBr(NamedTuple):
     label_idx: UnresolvedLabelIdx
 
 
+@register_instruction
 @register
 class UnresolvedBrIf(NamedTuple):
     label_idx: UnresolvedLabelIdx
 
 
+@register_instruction
 @register
 class UnresolvedBrTable(NamedTuple):
     label_indices: Tuple[Union[UnresolvedLabelIdx, LabelIdx], ...]
     default_idx: Union[UnresolvedLabelIdx, LabelIdx]
 
 
+@register_instruction
 @register
 class NamedBlock(NamedTuple):
     name: str
     block: Block
 
 
+@register_instruction
 @register
 class NamedLoop(NamedTuple):
     name: str
     loop: Loop
 
 
+@register_instruction
 @register
 class NamedIf(NamedTuple):
     name: str
@@ -152,3 +175,9 @@ class UnresolvedFunction(NamedTuple):
     type: Union[None, UnresolvedTypeIdx, UnresolvedFunctionType]
     locals: Tuple[ValType, ...]
     body: Tuple['BaseInstruction', ...]
+
+
+@register
+class NamedFunction(NamedTuple):
+    name: str
+    function: Function

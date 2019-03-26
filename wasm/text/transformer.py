@@ -10,11 +10,10 @@ from wasm._utils.decorators import (
     to_tuple,
 )
 from wasm._utils.toolz import (
-    cons,
     concat,
-    concatv,
 )
 from wasm.datatypes import (
+    Function,
     Export,
     FunctionIdx,
     GlobalIdx,
@@ -78,6 +77,7 @@ from wasm.opcodes import (
 )
 
 from .ir import (
+    UnresolvedInstruction,
     BaseUnresolved,
     Local,
     NamedBlock,
@@ -100,6 +100,7 @@ from .ir import (
     UnresolvedTypeIdx,
     UnresolvedVariableOp,
     UnresolvedFunction,
+    NamedFunction,
 )
 
 VARIABLE_LOOKUP = {
@@ -176,40 +177,128 @@ def normalize_expressions(expressions):
                 raise Exception("INVALID")
 
 
-def _join_head_and_tail(head, tail):
-    if tail is None:
-        return (head,)
+@to_tuple
+def parse_optional_args_sequence(args, matchers):
+    matchers_iter = iter(matchers)
+
+    for arg in args:
+        try:
+            match_fn, empty_value = next(matchers_iter)
+        except StopIteration:
+            raise Exception(f"INVALID: {arg} did not match")
+
+        if match_fn(arg):
+            yield arg
+        else:
+            yield empty_value
+
+    for _, empty_value in matchers_iter:
+        yield empty_value
+
+
+def _is_func_type(value):
+    if isinstance(value, UnresolvedFunctionType):
+        return True
+    elif isinstance(value, TypeIdx):
+        return True
+    elif isinstance(value, UnresolvedTypeIdx):
+        return True
     else:
-        return tuple(cons(head, tail))
+        return False
+
+
+def _is_locals(values):
+    if not values:
+        return False
+    elif not isinstance(values, tuple):
+        return False
+    else:
+        return all(isinstance(item, Local) for item in values)
+
+
+def _is_instrs(values):
+    if not values:
+        return False
+    elif not isinstance(values, tuple):
+        return False
+    else:
+        return all(
+            isinstance(item, (BaseInstruction, UnresolvedInstruction))
+            for item in values
+        )
+
+
+def any_unresolved(*values):
+    return any(_is_unresolved(item) for item in values)
+
+
+def _is_unresolved(value):
+    if isinstance(value, BaseUnresolved):
+        return True
+    elif isinstance(value, tuple):
+        return any(_is_unresolved(item) for item in value)
+    else:
+        raise Exception(f"INVALID TYPE: {value}")
+
+
+FUNCTION_TAIL_MATCHERS = (
+    (_is_func_type, UnresolvedFunctionType((), ())),
+    (_is_locals, ()),
+    (_is_instrs, End.as_tail()),
+)
+
+
+def _is_name(value):
+    return isinstance(value, str)
+
+
+def _is_function(value):
+    return isinstance(value, (Function, UnresolvedFunction))
+
+
+def _is_exports(values):
+    if not values:
+        return False
+    elif not isinstance(values, tuple):
+        return False
+    else:
+        return all(
+            isinstance(item, (Export, UnresolvedExport))
+            for item in values
+        )
+
+
+FUNCTION_DECLARATION_MATCHERS = (
+    (_is_name, None),
+    (_is_exports, ()),
+    (_is_function, UnresolvedFunction(UnresolvedFunctionType((), ()), (), End.as_tail())),
+)
 
 
 class WasmTransformer(Transformer):
     #
     # Functions
     #
-    @v_args(inline=True)
-    def function_declaration(self, args):
-        if not args:
-            return UnresolvedFunction(type=None, locals=(), body=End.as_tail())
-        elif len(args) == 1:
-            assert isinstance(args[0], str)
-            name = args[0]
-            return UnresolvedFunction(
-                type=UnresolvedFunctionIdx(name),
-                locals=(),
-                body=End.as_tail(),
-            )
-        else:
-            raise Exception("INVALID")
-
-    @v_args(tree=True)
-    def function_tail(self, tree):
-        assert False
-        return (
-            UnresolvedFunctionType((), ()),
-            locals,
-            End.as_tail(),
+    def function_declaration(self, *args):
+        name, exports, base_function = parse_optional_args_sequence(
+            args,
+            FUNCTION_DECLARATION_MATCHERS,
         )
+        if name is not None:
+            function = NamedFunction(name, base_function)
+        else:
+            function = base_function
+        return function, exports
+
+    def function_tail(self, *tail):
+        func_type, locals, body = parse_optional_args_sequence(
+            tail,
+            FUNCTION_TAIL_MATCHERS,
+        )
+        if any_unresolved(func_type, locals, body):
+            return UnresolvedFunction(func_type, locals, body)
+        else:
+            return Function(func_type, locals, body)
 
     #
     # Exports

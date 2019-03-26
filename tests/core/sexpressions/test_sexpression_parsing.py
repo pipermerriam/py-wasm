@@ -93,6 +93,7 @@ from wasm.text.ir import (
     UnresolvedLocalIdx,
     UnresolvedVariableOp,
     UnresolvedFunction,
+    NamedFunction,
 )
 
 
@@ -156,6 +157,8 @@ I32_CONST_2 = I32Const(numpy.uint32(2))
 I32_CONST_3 = I32Const(numpy.uint32(3))
 I32_CONST_7 = I32Const(numpy.uint32(7))
 RETURN = Return()
+
+EMPTY_FUNC_TYPE = UnresolvedFunctionType((), ())
 
 
 SEXPRESSION_TESTS = tuple(concatv(
@@ -466,9 +469,9 @@ SEXPRESSION_TESTS = tuple(concatv(
     ),
     with_start(
         'func',
-    #    # function declarations
-        ("(func)", UnresolvedFunction(type=None, locals=(), body=END_TAIL)),
-    #    ("(func $f)", UnresolvedFunction(type=UnresolvedFunctionIdx('$f'), locals=(), body=END_TAIL)),  # noqa: E501
+        # function declarations
+        ("(func)", (UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL), ())),
+        ("(func $f)", (NamedFunction('$f', UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL)), ())),  # noqa: E501
     #    ("(func (local))", UnresolvedFunction(type=None, locals=(), body=END_TAIL)),
     #    # function declarations w/inline exports
     #    # function imports

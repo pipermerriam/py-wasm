@@ -101,6 +101,7 @@ from .ir import (
     UnresolvedVariableOp,
     UnresolvedFunction,
     NamedFunction,
+    LinkedFunctionType,
 )
 
 VARIABLE_LOOKUP = {
@@ -272,6 +273,20 @@ FUNCTION_DECLARATION_MATCHERS = (
     (_is_name, None),
     (_is_exports, ()),
     (_is_function, UnresolvedFunction(UnresolvedFunctionType((), ()), (), End.as_tail())),
+)
+
+
+def _is_type(value):
+    return isinstance(value, (TypeIdx, UnresolvedTypeIdx))
+
+
+def _is_function_type(value):
+    return isinstance(value, UnresolvedFunctionType)
+
+
+TYPEUSE_MATCHERS = (
+    (_is_type, None),
+    (_is_function_type, UnresolvedFunctionType((), ())),
 )
 
 
@@ -487,20 +502,17 @@ class WasmTransformer(Transformer):
     def end_op(self):
         return End()
 
-    @v_args(inline=True)
-    def typeuse(self, typeuse):
-        if isinstance(typeuse, (TypeIdx, UnresolvedFunctionType, UnresolvedTypeIdx)):
-            return typeuse
+    def typeuse(self, *args):
+        type_idx, function_type = parse_optional_args_sequence(args, TYPEUSE_MATCHERS)
 
-        params, results = typeuse
-        return UnresolvedFunctionType(params, results)
-
-    def typeuse_params_and_results(self, *raw_params_and_results):
-        params_and_results = tuple(filter(bool, concat(raw_params_and_results)))
-        params = tuple(value for value in params_and_results if isinstance(value, Param))
-        results = tuple(value for value in params_and_results if isinstance(value, ValType))
-        assert len(params_and_results) == len(params) + len(results)
-        return params, results
+        if type_idx is not None and function_type is not None:
+            return LinkedFunctionType(type_idx, function_type)
+        elif type_idx is not None:
+            return type_idx
+        elif function_type is not None:
+            return function_type
+        else:
+            raise Exception("INVALID")
 
     #
     # Parametric Ops
@@ -650,8 +662,15 @@ class WasmTransformer(Transformer):
         return Reinterpret.from_opcode(opcode)
 
     #
-    # Params
+    # Params and Results
     #
+    def params_and_results(self, *raw_params_and_results):
+        params_and_results = tuple(filter(bool, concat(raw_params_and_results)))
+        params = tuple(value for value in params_and_results if isinstance(value, Param))
+        results = tuple(value for value in params_and_results if isinstance(value, ValType))
+        assert len(params_and_results) == len(params) + len(results)
+        return UnresolvedFunctionType(params, results)
+
     def params(self, *params):
         return tuple(concat(params))
 
@@ -664,9 +683,6 @@ class WasmTransformer(Transformer):
         else:
             return tuple(Param(valtype) for valtype in concat(valtypes))
 
-    #
-    # Results
-    #
     def result(self, result=None):
         if result is None:
             raise Discard()

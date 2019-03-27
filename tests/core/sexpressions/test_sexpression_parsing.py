@@ -64,12 +64,10 @@ from wasm.instructions.numeric import (
 )
 from wasm.text import (
     parse as default_parse,
+    default_transformer,
 )
 from wasm.text.lark import (
     GRAMMAR,
-)
-from wasm.text.transformer import (
-    WasmTransformer,
 )
 from wasm.text.ir import (
     UnresolvedExport,
@@ -94,6 +92,7 @@ from wasm.text.ir import (
     UnresolvedVariableOp,
     UnresolvedFunction,
     NamedFunction,
+    LinkedFunctionType,
 )
 
 
@@ -107,8 +106,7 @@ def _get_parse_fn(start_rule):
             parser="lalr",
             start=start_rule,
         )
-        transformer = WasmTransformer()
-        return functools.partial(default_parse, parser=parser, transformer=transformer)
+        return functools.partial(default_parse, parser=parser, transformer=default_transformer)
 
 
 @to_tuple
@@ -136,6 +134,7 @@ f64 = ValType.f64
 
 pi32 = Param(i32)
 pi64 = Param(i64)
+pf32 = Param(f32)
 pf64 = Param(f64)
 
 li32 = Local(i32)
@@ -160,6 +159,21 @@ RETURN = Return()
 
 EMPTY_FUNC_TYPE = UnresolvedFunctionType((), ())
 
+COMPLEX_FUNCTION_SEXPR = """(func $complex
+    (param i32 f32) (param $x i64) (param) (param i32)
+    (result) (result i32) (result)
+    (local f32) (local $y i32) (local i64 i32) (local) (local f64 i32)
+    (unreachable) (unreachable)
+  )
+"""
+COMPLEX_FUNCTION = NamedFunction('$complex', UnresolvedFunction(
+    type=UnresolvedFunctionType(
+        params=(pi32, pf32, Param(i64, '$x'), pi32),
+        results=(i32,),
+    ),
+    locals=(lf32, Local(i32, '$y'), li64, li32, lf64, li32),
+    body=(UNREACHABLE, UNREACHABLE, END),
+))
 
 SEXPRESSION_TESTS = tuple(concatv(
     with_start(
@@ -259,6 +273,44 @@ SEXPRESSION_TESTS = tuple(concatv(
         ("(call 1)", Call(FunctionIdx(1))),
     ),
     with_start(
+        'params_and_results',
+        ("(result)", UnresolvedFunctionType((), ())),
+        ("(param)", UnresolvedFunctionType((), ())),
+        ("(param i64)", UnresolvedFunctionType((pi64,), ())),
+        ("(result i64)", UnresolvedFunctionType((), (i64,))),
+        ("(param i64) (result i32)", UnresolvedFunctionType((pi64,), (i32,))),
+        (
+            "(param i64) (param) (param f64 i32 i64)",
+            UnresolvedFunctionType((pi64, pf64, pi32, pi64), ())
+        ),
+        (
+            "(param) (param i64) (param) (param f64 i32 i64) (param) (param) (result) (result i32) (result) (result)",  # noqa: E501
+            UnresolvedFunctionType((pi64, pf64, pi32, pi64), (i32,)),
+        ),
+    ),
+    with_start(
+        'typeuse',
+        ("(result)", UnresolvedFunctionType((), ())),
+        ("(param i64)", UnresolvedFunctionType((pi64,), ())),
+        ("(param i64) (result i32)", UnresolvedFunctionType((pi64,), (i32,))),
+        (
+            "(param i64) (param) (param f64 i32 i64)",
+            UnresolvedFunctionType((pi64, pf64, pi32, pi64), ()),
+        ),
+        (
+            "(param) (param i64) (param) (param f64 i32 i64) (param) (param) (result) (result i32) (result) (result)",  # noqa: E501
+            UnresolvedFunctionType((pi64, pf64, pi32, pi64), (i32,)),
+        ),
+        (
+            "(type $check)",
+            UnresolvedTypeIdx('$check'),
+        ),
+        (
+            "(type $over-i64) (param i64) (result i64)",
+            LinkedFunctionType(UnresolvedTypeIdx('$over-i64'), UnresolvedFunctionType((pi64,), (i64,))),  # noqa: E501
+        ),
+    ),
+    with_start(
         'exprs',
         ("(call_indirect (result))", UnresolvedCallIndirect(UnresolvedFunctionType((), ()))),
         (
@@ -280,6 +332,10 @@ SEXPRESSION_TESTS = tuple(concatv(
         (
             "(call_indirect (type $check))",
             UnresolvedCallIndirect(UnresolvedTypeIdx('$check')),
+        ),
+        (
+            "(call_indirect (type $over-i64) (param i64) (result i64))",
+            UnresolvedCallIndirect(LinkedFunctionType(UnresolvedTypeIdx('$check'), UnresolvedFunctionType((pi64,), (i64,)))),  # noqa: E501
         ),
     ),
     with_start(
@@ -313,6 +369,9 @@ SEXPRESSION_TESTS = tuple(concatv(
                 BinOp.from_opcode(BinaryOpcode.I32_MUL),
             ),
         ),
+    ),
+    with_start(
+        'typeuse',
     ),
     with_start(
         'func_type',
@@ -472,6 +531,7 @@ SEXPRESSION_TESTS = tuple(concatv(
         # function declarations
         ("(func)", (UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL), ())),
         ("(func $f)", (NamedFunction('$f', UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL)), ())),  # noqa: E501
+        (COMPLEX_FUNCTION_SEXPR, COMPLEX_FUNCTION),
     #    ("(func (local))", UnresolvedFunction(type=None, locals=(), body=END_TAIL)),
     #    # function declarations w/inline exports
     #    # function imports

@@ -9,6 +9,7 @@ from typing import (
 )
 
 from wasm.datatypes import (
+    TypeIdx,
     LabelIdx,
     ValType,
     Function,
@@ -73,6 +74,12 @@ class UnresolvedFunctionType(NamedTuple):
 @register
 class UnresolvedTypeIdx(NamedTuple):
     name: str
+
+
+@register
+class LinkedFunctionType(NamedTuple):
+    type_idx: Union[UnresolvedTypeIdx, TypeIdx]
+    function_type: UnresolvedFunctionType
 
 
 @register

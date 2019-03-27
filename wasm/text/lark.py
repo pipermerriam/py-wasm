@@ -1,5 +1,5 @@
 GRAMMAR = r"""
-_WHITESPACE: (" " | /\n/ | /\t/)+
+_WHITESPACE: /[ \n\t\r]/+
 
 DIGIT: /[0-9]/
 NUM: DIGIT+
@@ -70,14 +70,12 @@ local_named: _LOCAL _ws name _ws valtype
 local_bare : _LOCAL (_ws        valtypes)?
 
 ?local: _open (local_named | local_bare) _close
-_locals_tail: _ws local
-locals: local _locals_tail*
+locals: (local _ws)* local
 
 _RESULT: "result"
 
 ?result: _open _RESULT (_ws valtypes)? _close
-_results_tail: _ws result
-results: result _results_tail*
+results: (result _ws)* result
 
 _PARAM: "param"
 
@@ -85,8 +83,7 @@ param_named: _PARAM _ws name _ws valtype
 param_bare : _PARAM (_ws        valtypes)?
 
 ?param: _open (param_named | param_bare) _close
-_params_tail: _ws param
-params: param _params_tail*
+params: (param _ws)* param
 
 SIGN: "s" | "u"
 
@@ -222,12 +219,12 @@ _TYPE: "type"
 typeidx: _var
 
 _typeuse_direct: _open _TYPE _ws typeidx _close
-typeuse_params_and_results: (_ws param)* (_ws result)*
-typeuse: _ws _typeuse_direct | typeuse_params_and_results
+params_and_results: params | results | (param _ws)+ results
+typeuse: _typeuse_direct | params_and_results | _typeuse_direct _ws params_and_results
 
 _FUNC: "func"
 
-?func_type: _open _FUNC typeuse _close
+?func_type: _open _FUNC _ws typeuse _close
 
 _CALL:          "call"
 _CALL_INDIRECT: "call_indirect"
@@ -242,7 +239,7 @@ _END:           "end"
 funcidx: _var
 
 call_op: _CALL _ws funcidx
-call_indirect_op: _CALL_INDIRECT typeuse
+call_indirect_op: _CALL_INDIRECT _ws typeuse
 
 labelidx: _var
 
@@ -313,15 +310,13 @@ if_instr_anon: if_body_anon else_tail_anon? _ws end_op
 if_instr: if_instr_named | if_instr_anon
 
 instr: op | block_instr | loop_instr | if_instr | expr
-_instrs_tail: _ws instr
-instrs: instr _instrs_tail*
+instrs: (instr _ws) * instr
 
 folded_op: op _ws exprs
 ?inlined_folded_op: folded_op
 
 expr: _open (op | inlined_folded_op | block_body | loop_body | folded_if) _close
-_exprs_tail: _ws expr
-?exprs: expr _exprs_tail*
+?exprs: (expr _ws)* expr
 
 _EXPORT: "export"
 

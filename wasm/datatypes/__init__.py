@@ -37,6 +37,7 @@ from .imports import (  # noqa: F401
     Import,
 )
 from .indices import (  # noqa: F401
+    Idx,
     FunctionIdx,
     GlobalIdx,
     LabelIdx,

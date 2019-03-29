@@ -1,6 +1,7 @@
 from wasm._utils.toolz import (
     concat,
     curry,
+    complement,
 )
 from wasm._utils.decorators import to_tuple
 from wasm import datatypes
@@ -22,6 +23,26 @@ def _exactly_one(toks):
     return toks[0]
 
 
+def any_unresolved(*values):
+    return any(_is_unresolved(item) for item in values)
+
+
+all_resolved = complement(any_unresolved)
+
+
+def _is_unresolved(value):
+    if isinstance(value, ir.BaseUnresolved):
+        return True
+    elif isinstance(value, instructions.BaseInstruction):
+        return False
+    elif isinstance(value, datatypes.Idx):
+        return False
+    elif isinstance(value, tuple):
+        return any(_is_unresolved(item) for item in value)
+    else:
+        raise Exception(f"INVALID TYPE: {value}")
+
+
 def _assert_false(s, loc, toks):
     assert False
 
@@ -39,6 +60,26 @@ def parse_simple_op(instruction_class, s, loc, toks):
     return instruction_class()
 
 
+@curry
+def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
+    var = _exactly_one(toks)
+
+    if isinstance(var, ir.BaseUnresolved):
+        return unresolved_class(var)
+    elif isinstance(var, datatypes.Idx):
+        return resolved_class(var)
+    else:
+        raise Exception("INVALID")
+
+
+#
+# Exports
+#
+def parse_export(s, loc, toks):
+    name, descriptor = toks
+    return datatypes.Export(name, descriptor)
+
+
 #
 # Expressions
 #
@@ -51,7 +92,7 @@ def _normalize_expressions(*expressions):
             if isinstance(expr, (ir.BaseUnresolved, instructions.BaseInstruction)):
                 yield expr
             elif isinstance(expr, tuple):
-                yield from _normalize_expressions(expr)
+                yield from _normalize_expressions(*expr)
             else:
                 raise Exception("INVALID")
 
@@ -165,14 +206,114 @@ parse_end = parse_simple_op(instructions.End)
 parse_unreachable = parse_simple_op(instructions.Unreachable)
 
 
+parse_call_op = parse_simple_var_wrapper(instructions.Call, ir.UnresolvedCall)
+
+
+def parse_call_indirect_op(s, loc, toks):
+    typeuse = _exactly_one(toks)
+    return ir.UnresolvedCallIndirect(typeuse)
+
+
+parse_br_op = parse_simple_var_wrapper(instructions.Br, ir.UnresolvedBr)
+parse_br_if_op = parse_simple_var_wrapper(instructions.BrIf, ir.UnresolvedBrIf)
+
+
+def parse_br_table_op(s, loc, toks):
+    all_label_indices = tuple(toks)
+    is_resolved = all_resolved(all_label_indices)
+    *label_indices, default_idx = all_label_indices
+
+    if is_resolved:
+        return instructions.BrTable(
+            label_indices=tuple(label_indices),
+            default_idx=default_idx,
+        )
+    else:
+        return ir.UnresolvedBrTable(
+            label_indices=tuple(label_indices),
+            default_idx=default_idx,
+        )
+
+
 def parse_folded_block(s, loc, toks):
     name, block_type, instrs = toks
+    if instrs is None:
+        instrs = instructions.End.as_tail()
+    else:
+        instrs = instrs + instructions.End.as_tail()
+
     base_block = instructions.Block(block_type, instrs)
     if name is None:
         block = base_block
     else:
         block = ir.NamedBlock(name, base_block)
     return block
+
+
+def parse_folded_loop(s, loc, toks):
+    name, block_type, instrs = toks
+    if instrs is None:
+        instrs = instructions.End.as_tail()
+    else:
+        instrs = instrs + instructions.End.as_tail()
+
+    base_loop = instructions.Loop(block_type, instrs)
+    if name is None:
+        loop = base_loop
+    else:
+        loop = ir.NamedLoop(name, base_loop)
+    return loop
+
+
+def parse_folded_if(s, loc, toks):
+    name, block_type, exprs, then_instrs, else_instrs = toks
+    if else_instrs is None:
+        else_instrs = instructions.End.as_tail()
+    else:
+        else_instrs = else_instrs + instructions.End.as_tail()
+
+    if then_instrs is None:
+        then_instrs = instructions.Else.as_tail()
+    else:
+        then_instrs = then_instrs + instructions.Else.as_tail()
+
+    base_if_instr = instructions.If(block_type, then_instrs, else_instrs)
+
+    if name is not None:
+        if_instr = ir.NamedIf(name, base_if_instr)
+    else:
+        if_instr = base_if_instr
+
+    return exprs + (if_instr,)
+
+
+#
+# TypeUse
+#
+def parse_typeuse_linked(s, loc, toks):
+    type_idx, function_type = toks
+    return ir.LinkedFunctionType(type_idx, function_type)
+
+
+def parse_typeuse_only_params(s, loc, toks):
+    if not toks:
+        params = ()
+    else:
+        params = tuple(concat(toks))
+    return ir.UnresolvedFunctionType(params, ())
+
+
+def parse_typeuse_only_results(s, loc, toks):
+    if not toks:
+        results = ()
+    else:
+        results = tuple(concat(toks))
+    return ir.UnresolvedFunctionType((), results)
+
+
+def parse_typeuse_params_and_results(s, loc, toks):
+    params, results = toks
+    return ir.UnresolvedFunctionType(params, results)
 
 
 #
@@ -207,15 +348,28 @@ def parse_valtypes(s, loc, toks):
     return tuple(toks)
 
 
-def parse_local_idx(s, loc, toks):
+#
+# Indices Types
+#
+@curry
+def parse_indices(index_class, unresolved_class, s, loc, toks):
     var = _exactly_one(toks)
 
     if isinstance(var, int):
-        return datatypes.LocalIdx(var)
+        return index_class(var)
     elif isinstance(var, str):
-        return ir.UnresolvedLocalIdx(var)
+        return unresolved_class(var)
     else:
         raise Exception("INVALID")
+
+
+parse_local_idx = parse_indices(datatypes.LocalIdx, ir.UnresolvedLocalIdx)
+parse_global_idx = parse_indices(datatypes.GlobalIdx, ir.UnresolvedGlobalIdx)
+parse_function_idx = parse_indices(datatypes.FunctionIdx, ir.UnresolvedFunctionIdx)
+parse_label_idx = parse_indices(datatypes.LabelIdx, ir.UnresolvedLabelIdx)
+parse_memory_idx = parse_indices(datatypes.MemoryIdx, ir.UnresolvedMemoryIdx)
+parse_table_idx = parse_indices(datatypes.TableIdx, ir.UnresolvedTableIdx)
+parse_type_idx = parse_indices(datatypes.TypeIdx, ir.UnresolvedTypeIdx)
 
 
 #

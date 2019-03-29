@@ -1,26 +1,30 @@
-class FunctionIdx(int):
+class Idx(int):
     pass
 
 
-class GlobalIdx(int):
+class FunctionIdx(Idx):
     pass
 
 
-class LabelIdx(int):
+class GlobalIdx(Idx):
     pass
 
 
-class LocalIdx(int):
+class LabelIdx(Idx):
     pass
 
 
-class MemoryIdx(int):
+class LocalIdx(Idx):
     pass
 
 
-class TableIdx(int):
+class MemoryIdx(Idx):
     pass
 
 
-class TypeIdx(int):
+class TableIdx(Idx):
+    pass
+
+
+class TypeIdx(Idx):
     pass

@@ -25,8 +25,8 @@ def any_literal(*literals):
     return functools.reduce(operator.xor, map(Literal, literals))
 
 
-def maybe(expr, default=None):
-    return Optional(ws + expr, default=default)
+def maybe(thing, default=None):
+    return Optional(ws + thing, default=default)
 
 
 WHITESPACE = Word(' \n\t\r')
@@ -63,8 +63,9 @@ FLOAT_AS_NUM = Combine(NUM + DOT + Optional(NUM) + Optional(CaselessLiteral('e')
 FLOAT = FLOAT_AS_HEX ^ FLOAT_AS_NUM
 
 DOLLAR = Literal('$')
-namechars = alphanums + "_.+-*/\\^~=<>!?@#$%&|:'`"
-NAME = Combine(Literal('$') + Word(namechars))
+idchars = alphanums + "_.+-*/\\^~=<>!?@#$%&|:'`"
+SYMBOL_ID = Combine(Literal('$') + Word(idchars))
+ID = NAT ^ SYMBOL_ID
 
 DOUBLE_QUOTE = Literal('"').suppress()
 
@@ -95,7 +96,7 @@ stringbody = string_chars ^ string_escaped_values ^ string_escaped_unicode ^ str
 # TODO: this doesn't fully cover the allowed characters.
 STRING = Combine(DOUBLE_QUOTE + ZeroOrMore(stringbody) + DOUBLE_QUOTE)
 
-VAR = NAT ^ NAME
+VAR = NAT ^ SYMBOL_ID
 VALUE = INT ^ FLOAT
 
 I32 = Literal("i32")
@@ -108,7 +109,7 @@ valtypes = (VALTYPE + ZeroOrMore(ws + VALTYPE)).setParseAction(parsers.parse_val
 
 LOCAL = Literal('local').suppress()
 
-local_named = (LOCAL + ws + NAME + ws + VALTYPE).setParseAction(parsers.parse_named_local)
+local_named = (LOCAL + ws + ID + ws + VALTYPE).setParseAction(parsers.parse_named_local)
 local_bulk = (LOCAL + Optional(ws + valtypes)).setParseAction(parsers.parse_bulk_locals)  # noqa: E501
 
 local = open + (local_named | local_bulk) + close
@@ -117,7 +118,7 @@ locals = (local + ZeroOrMore(ws + local)).setParseAction(parsers.concatenate_tok
 
 PARAM = Literal("param").suppress()
 
-param_named = (PARAM + ws + NAME + ws + VALTYPE).setParseAction(parsers.parse_named_param)
+param_named = (PARAM + ws + ID + ws + VALTYPE).setParseAction(parsers.parse_named_param)
 param_bulk = (PARAM + Optional(ws + valtypes)).setParseAction(parsers.parse_bulk_params)
 
 param = open + (param_named | param_bulk) + close
@@ -301,9 +302,7 @@ nop_op = Literal("nop").setParseAction(parsers.parse_nop)
 unreachable_op = Literal("unreachable").setParseAction(parsers.parse_unreachable)
 end_op = Literal("end").setParseAction(parsers.parse_end)
 
-instrs = Forward()
 expr = Forward()
-exprs = Forward()
 
 CALL = Literal("call").suppress()
 CALL_INDIRECT = Literal("call_indirect").suppress()
@@ -323,22 +322,23 @@ br_op = (BR + ws + label_idx).setParseAction(parsers.parse_br_op)
 #
 # Block Control Ops
 #
-blk_name = Optional(ws + NAME, default=None)
-blk_type = Optional(ws + results, default=())
-blk_instrs = Optional(ws + instrs, default=None)
+blk_name = maybe(SYMBOL_ID)
+blk_type = maybe(results, default=())
+blk_instrs = maybe(expr, default=()).setParseAction(parsers.parse_blk_instrs)
 blk_body = blk_name + blk_type + blk_instrs
 
 BLOCK = Literal("block").suppress()
 
 folded_block_op = (BLOCK + blk_body).setParseAction(parsers.parse_folded_block)
-block_instr = folded_block_op + ws + end_op + matchPreviousExpr(BLOCK + blk_name)
+block_instr = (folded_block_op + ws + end_op + maybe(matchPreviousExpr(BLOCK + blk_name))).setParseAction(parsers.parse_block)  # noqa: E501
 
 
 LOOP = Literal("loop").suppress()
 
 folded_loop_op = (LOOP + blk_body).setParseAction(parsers.parse_folded_loop)
-loop_instr = folded_loop_op + ws + end_op + matchPreviousExpr(LOOP + blk_name)
+loop_instr = folded_loop_op + ws + end_op + maybe(matchPreviousExpr(LOOP + blk_name))
 
+folded_instr = Forward().setParseAction(parsers.parse_folded_instr)
 
 IF = Literal("if").suppress()
 THEN = Literal("then").suppress()
@@ -346,22 +346,22 @@ ELSE = Literal("else").suppress()
 
 folded_then = open + THEN + blk_instrs + close
 folded_else = open + ELSE + blk_instrs + close
-folded_if_op = (IF + blk_name + blk_type + maybe(exprs, default=()) + ws + folded_then + maybe(folded_else)).setParseAction(parsers.parse_folded_if)  # noqa: E501
+folded_if_op = (IF + blk_name + blk_type + maybe(folded_instr) + ws + folded_then + maybe(folded_else)).setParseAction(parsers.parse_folded_if)  # noqa: E501
 
-else_inline = ELSE + matchPreviousExpr(IF + blk_name) + blk_instrs
-if_instr = IF + blk_body + maybe(else_inline) + ws + end_op + matchPreviousExpr(IF + blk_name)  # noqa: E501
+else_inline = ELSE + maybe(matchPreviousExpr(IF + blk_name)) + blk_instrs
+if_instr = IF + blk_body + maybe(else_inline) + ws + end_op + maybe(matchPreviousExpr(IF + blk_name))  # noqa: E501
 
-control_op = return_op ^ nop_op ^ unreachable_op ^ end_op ^ call_op ^ call_indirect_op ^ br_op ^ br_if_op ^ br_table_op  # noqa: E501
+control_op = return_op ^ nop_op ^ unreachable_op ^ call_op ^ call_indirect_op ^ br_op ^ br_if_op ^ br_table_op  # noqa: E501
 
 op = numeric_op ^ memory_op ^ variable_op ^ parametric_op ^ control_op
 
-folded_op = (op + ws + exprs).setParseAction(parsers.parse_folded_op)
+folded_instrs = folded_instr + ZeroOrMore(ws + folded_instr)
+folded_op = op + maybe(folded_instrs)
 
-instr = op ^ block_instr ^ loop_instr ^ if_instr ^ expr
-instrs << (instr + ZeroOrMore(ws + instr)).setParseAction(parsers.parse_instrs)
+folded_instr = open + (folded_op ^ folded_block_op ^ folded_loop_op ^ folded_if_op) + close
 
-expr << open + (op ^ folded_op ^ folded_block_op ^ folded_loop_op ^ folded_if_op) + close
-exprs << (expr + ZeroOrMore(ws + expr)).setParseAction(parsers.parse_exprs)
+instr = op ^ block_instr ^ loop_instr ^ if_instr ^ folded_instr
+expr = (instr + ZeroOrMore(ws + instr)).setParseAction(parsers.parse_instrs)
 
 EXPORT = Literal("export").suppress()
 FUNC = Literal("func").suppress()
@@ -383,5 +383,15 @@ IMPORT = Literal("import").suppress()
 export_inline = open + EXPORT + ws + STRING + close
 import_inline = open + IMPORT + ws + STRING + ws + STRING + close
 
-function = (open + FUNC + maybe(NAME) + maybe(export_inline) + maybe(typeuse) + maybe(locals) + maybe(instrs) + close).setParseAction(parsers.parse_function)  # noqa: E501
-folded_function_import = (open + FUNC + maybe(NAME) + ws + import_inline + maybe(typeuse) + close).setParseAction(parsers.parse_function_import)  # noqa: E501
+inline_exports = (export_inline + ZeroOrMore(ws + export_inline)).setParseAction(parsers.parse_export_names)  # noqa: E501
+
+function = (open + FUNC + maybe(SYMBOL_ID) + maybe(export_inline) + maybe(typeuse) + maybe(locals) + maybe(expr) + close).setParseAction(parsers.parse_function)  # noqa: E501
+folded_function_import = (open + FUNC + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + ws + import_inline + maybe(typeuse) + close).setParseAction(parsers.parse_folded_function_import)  # noqa: E501
+
+MUT = Literal("mut")
+
+global_const = VALTYPE.copy().setParseAction(parsers.parse_valtype, parsers.parse_global_const)
+global_mut = (open + MUT + ws + VALTYPE + close).setParseAction(parsers.parse_valtype, parsers.parse_global_mut)  # noqa: E501
+global_type = global_const ^ global_mut
+
+_global = (open + GLOBAL + maybe(SYMBOL_ID) + ws + global_type + ws + expr + close).setParseAction(parsers.parse_global)  # noqa: E501

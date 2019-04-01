@@ -73,6 +73,29 @@ def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
 
 
 #
+# Globals
+#
+def parse_global(s, loc, toks):
+    name, global_type, init = toks
+    _global = datatypes.Global(global_type, init)
+
+    if name is None:
+        return _global
+    else:
+        return ir.NamedGlobal(name, _global)
+
+
+def parse_global_mut(s, loc, toks):
+    valtype = _exactly_one(toks)
+    return datatypes.GlobalType.var(valtype)
+
+
+def parse_global_const(s, loc, toks):
+    valtype = _exactly_one(toks)
+    return datatypes.GlobalType.const(valtype)
+
+
+#
 # Functions
 #
 def parse_function(s, loc, toks):
@@ -101,12 +124,22 @@ def parse_function(s, loc, toks):
         return function
 
 
-def parse_function_import(s, loc, toks):
-    name, module_name, as_name, typeuse = toks
+#
+# Imports
+#
+@to_tuple
+def parse_folded_function_import(s, loc, toks):
+    name, export_names, module_name, as_name, typeuse = toks
     assert typeuse is not None  # TODO: verify that typeuse is indeed required
-    assert name is not None  # TODO: verify that name is indeed required
-    desc = ir.LinkedFunctionType(ir.UnresolvedTypeIdx(name), typeuse)
-    return ir.UnresolvedImport(module_name, as_name, desc)
+
+    if name is None:
+        desc = typeuse
+    else:
+        desc = ir.LinkedFunctionType(ir.UnresolvedTypeIdx(name), typeuse)
+
+    for name in export_names:
+        yield ir.UnresolvedExport(name, desc)
+    yield ir.UnresolvedImport(module_name, as_name, desc)
 
 
 #
@@ -115,6 +148,10 @@ def parse_function_import(s, loc, toks):
 def parse_export(s, loc, toks):
     name, descriptor = toks
     return datatypes.Export(name, descriptor)
+
+
+def parse_export_names(s, loc, toks):
+    return tuple(toks)
 
 
 #
@@ -138,17 +175,22 @@ def parse_exprs(s, loc, toks):
     return _normalize_expressions(*toks)
 
 
+def parse_expr(s, loc, toks):
+    return _normalize_expressions(*toks) + instructions.End.as_tail()
+
+
 def parse_instrs(s, loc, toks):
     return _normalize_expressions(*toks)
 
 
-def parse_folded_op(s, loc, toks):
+def parse_folded_instr(s, loc, toks):
     op, exprs = toks
+    assert False
 
     if isinstance(exprs, (instructions.BaseInstruction, ir.BaseUnresolved)):
         return (exprs, op)
     elif isinstance(exprs, tuple):
-        return exprs + (op,)
+        return exprs[:-1] + (op,)
     else:
         raise Exception("INVALID")
 
@@ -272,12 +314,20 @@ def parse_br_table_op(s, loc, toks):
         )
 
 
+def parse_block(s, loc, toks):
+    block, end, tail_name = toks
+    if tail_name is not None:
+        # TODO: account for this
+        assert False
+    return block
+
+
 def parse_folded_block(s, loc, toks):
     name, block_type, instrs = toks
     if instrs is None:
-        instrs = instructions.End.as_tail()
-    else:
-        instrs = instrs + instructions.End.as_tail()
+        assert False
+    elif instrs[-1] != instructions.End():
+        assert False
 
     base_block = instructions.Block(block_type, instrs)
     if name is None:
@@ -322,6 +372,11 @@ def parse_folded_if(s, loc, toks):
         if_instr = base_if_instr
 
     return exprs + (if_instr,)
+
+
+def parse_blk_instrs(s, loc, toks):
+    instrs = _normalize_expressions(*toks)
+    return instrs + instructions.End.as_tail()
 
 
 #

@@ -1,7 +1,7 @@
 import numpy
 
 from wasm._utils.decorators import to_tuple
-from wasm._utils.toolz import memoize, cons, concatv
+from wasm._utils.toolz import cons, concatv
 from wasm.datatypes import (
     ValType,
     GlobalIdx,
@@ -11,6 +11,8 @@ from wasm.datatypes import (
     LocalIdx,
     TableIdx,
     MemoryIdx,
+    GlobalType,
+    Global,
 )
 from wasm.opcodes import (
     BinaryOpcode,
@@ -62,6 +64,7 @@ from wasm.instructions.numeric import (
 )
 from wasm.text import grammar
 from wasm.text.ir import (
+    NamedGlobal,
     UnresolvedImport,
     UnresolvedExport,
     UnresolvedGlobalIdx,
@@ -226,197 +229,166 @@ SEXPRESSION_TESTS = tuple(concatv(
         ),
     ),
     with_parser(
-        grammar.expr,
-        ('(i32.const 1234)', I32Const(1234)),
-        ('(i64.const 1234)', I64Const(1234)),
-        ('(f32.const 1234)', F32Const(1234)),
-        ('(f64.const 1234)', F64Const(1234)),
+        grammar.instr,
+        ('i32.const 1234', I32Const(1234)),
+        ('i64.const 1234', I64Const(1234)),
+        ('f32.const 1234', F32Const(1234)),
+        ('f64.const 1234', F64Const(1234)),
     ),
     with_parser(
-        grammar.expr,
+        grammar.instr,
         *tuple(
-            (f'({op.text})', instruction.from_opcode(op))
+            (op.text, instruction.from_opcode(op))
             for ops, instruction in OP_PAIRS
             for op in ops
         ),
     ),
     with_parser(
-        grammar.expr,
-        ('(i32.wrap_i64)', Wrap()),
-        ('(i64.extend_i32_s)', Extend.from_opcode(BinaryOpcode.I64_EXTEND_S_I32)),
-        ('(i64.extend_i32_u)', Extend.from_opcode(BinaryOpcode.I64_EXTEND_U_I32)),
+        grammar.instr,
+        ('i32.wrap_i64', Wrap()),
+        ('i64.extend_i32_s', Extend.from_opcode(BinaryOpcode.I64_EXTEND_S_I32)),
+        ('i64.extend_i32_u', Extend.from_opcode(BinaryOpcode.I64_EXTEND_U_I32)),
     ),
     with_parser(
-        grammar.expr,
-        ('(i32.trunc_f32_s)', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_S_F32)),
-        ('(i32.trunc_f32_u)', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_U_F64)),
-        ('(i32.trunc_f64_s)', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_S_F32)),
-        ('(i32.trunc_f64_u)', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_U_F64)),
-        ('(i64.trunc_f32_s)', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_S_F32)),
-        ('(i64.trunc_f32_u)', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_U_F64)),
-        ('(i64.trunc_f64_s)', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_S_F32)),
-        ('(i64.trunc_f64_u)', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_U_F64)),
+        grammar.instr,
+        ('i32.trunc_f32_s', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_S_F32)),
+        ('i32.trunc_f32_u', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_U_F64)),
+        ('i32.trunc_f64_s', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_S_F32)),
+        ('i32.trunc_f64_u', Truncate.from_opcode(BinaryOpcode.I32_TRUNC_U_F64)),
+        ('i64.trunc_f32_s', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_S_F32)),
+        ('i64.trunc_f32_u', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_U_F64)),
+        ('i64.trunc_f64_s', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_S_F32)),
+        ('i64.trunc_f64_u', Truncate.from_opcode(BinaryOpcode.I64_TRUNC_U_F64)),
     ),
     with_parser(
-        grammar.expr,
-        ('(f32.convert_i32_s)', Convert.from_opcode(BinaryOpcode.F32_CONVERT_S_I32)),
-        ('(f32.convert_i32_u)', Convert.from_opcode(BinaryOpcode.F32_CONVERT_U_I32)),
-        ('(f32.convert_i64_s)', Convert.from_opcode(BinaryOpcode.F32_CONVERT_S_I64)),
-        ('(f32.convert_i64_u)', Convert.from_opcode(BinaryOpcode.F32_CONVERT_U_I64)),
-        ('(f64.convert_i32_s)', Convert.from_opcode(BinaryOpcode.F64_CONVERT_S_I32)),
-        ('(f64.convert_i32_u)', Convert.from_opcode(BinaryOpcode.F64_CONVERT_U_I32)),
-        ('(f64.convert_i64_s)', Convert.from_opcode(BinaryOpcode.F64_CONVERT_S_I64)),
-        ('(f64.convert_i64_u)', Convert.from_opcode(BinaryOpcode.F64_CONVERT_U_I64)),
+        grammar.instr,
+        ('f32.convert_i32_s', Convert.from_opcode(BinaryOpcode.F32_CONVERT_S_I32)),
+        ('f32.convert_i32_u', Convert.from_opcode(BinaryOpcode.F32_CONVERT_U_I32)),
+        ('f32.convert_i64_s', Convert.from_opcode(BinaryOpcode.F32_CONVERT_S_I64)),
+        ('f32.convert_i64_u', Convert.from_opcode(BinaryOpcode.F32_CONVERT_U_I64)),
+        ('f64.convert_i32_s', Convert.from_opcode(BinaryOpcode.F64_CONVERT_S_I32)),
+        ('f64.convert_i32_u', Convert.from_opcode(BinaryOpcode.F64_CONVERT_U_I32)),
+        ('f64.convert_i64_s', Convert.from_opcode(BinaryOpcode.F64_CONVERT_S_I64)),
+        ('f64.convert_i64_u', Convert.from_opcode(BinaryOpcode.F64_CONVERT_U_I64)),
     ),
     with_parser(
-        grammar.expr,
-        ('(f32.demote_f64)', Demote()),
-        ('(f64.promote_f32)', Promote()),
+        grammar.instr,
+        ('f32.demote_f64', Demote()),
+        ('f64.promote_f32', Promote()),
     ),
     with_parser(
-        grammar.expr,
-        ('(i32.reinterpret_f32)', Reinterpret.from_opcode(BinaryOpcode.I32_REINTERPRET_F32)),
-        ('(i64.reinterpret_f64)', Reinterpret.from_opcode(BinaryOpcode.I64_REINTERPRET_F64)),
-        ('(f32.reinterpret_i32)', Reinterpret.from_opcode(BinaryOpcode.F32_REINTERPRET_I32)),
-        ('(f64.reinterpret_i64)', Reinterpret.from_opcode(BinaryOpcode.F64_REINTERPRET_I64)),
+        grammar.instr,
+        ('i32.reinterpret_f32', Reinterpret.from_opcode(BinaryOpcode.I32_REINTERPRET_F32)),
+        ('i64.reinterpret_f64', Reinterpret.from_opcode(BinaryOpcode.I64_REINTERPRET_F64)),
+        ('f32.reinterpret_i32', Reinterpret.from_opcode(BinaryOpcode.F32_REINTERPRET_I32)),
+        ('f64.reinterpret_i64', Reinterpret.from_opcode(BinaryOpcode.F64_REINTERPRET_I64)),
     ),
     with_parser(
-        grammar.expr,
-        ('(drop)', Drop()),
-        ('(select)', Select()),
+        grammar.instr,
+        ('drop', Drop()),
+        ('select', Select()),
     ),
     with_parser(
-        grammar.expr,
-        ('(local.get $i)', UnresolvedVariableOp(BinaryOpcode.GET_LOCAL, UnresolvedLocalIdx('$i'))),
-        ('(local.get 1)', LocalOp.from_opcode(BinaryOpcode.GET_LOCAL, LocalIdx(1))),
-        ('(local.set $i)', UnresolvedVariableOp(BinaryOpcode.SET_LOCAL, UnresolvedLocalIdx('$i'))),
-        ('(local.set 1)', LocalOp.from_opcode(BinaryOpcode.SET_LOCAL, LocalIdx(1))),
-        ('(local.tee $i)', UnresolvedVariableOp(BinaryOpcode.TEE_LOCAL, UnresolvedLocalIdx('$i'))),
-        ('(local.tee 1)', LocalOp.from_opcode(BinaryOpcode.TEE_LOCAL, LocalIdx(1))),
-        ('(global.get $i)', UnresolvedVariableOp(BinaryOpcode.GET_GLOBAL, UnresolvedGlobalIdx('$i'))),  # noqa: E501
-        ('(global.get 1)', GlobalOp.from_opcode(BinaryOpcode.GET_GLOBAL, GlobalIdx(1))),
-        ('(global.set $i)', UnresolvedVariableOp(BinaryOpcode.SET_GLOBAL, UnresolvedGlobalIdx('$i'))),  # noqa: E501
-        ('(global.set 1)', GlobalOp.from_opcode(BinaryOpcode.SET_GLOBAL, GlobalIdx(1))),
+        grammar.instr,
+        ('local.get $i', UnresolvedVariableOp(BinaryOpcode.GET_LOCAL, UnresolvedLocalIdx('$i'))),
+        ('local.get 1', LocalOp.from_opcode(BinaryOpcode.GET_LOCAL, LocalIdx(1))),
+        ('local.set $i', UnresolvedVariableOp(BinaryOpcode.SET_LOCAL, UnresolvedLocalIdx('$i'))),
+        ('local.set 1', LocalOp.from_opcode(BinaryOpcode.SET_LOCAL, LocalIdx(1))),
+        ('local.tee $i', UnresolvedVariableOp(BinaryOpcode.TEE_LOCAL, UnresolvedLocalIdx('$i'))),
+        ('local.tee 1', LocalOp.from_opcode(BinaryOpcode.TEE_LOCAL, LocalIdx(1))),
+        ('global.get $i', UnresolvedVariableOp(BinaryOpcode.GET_GLOBAL, UnresolvedGlobalIdx('$i'))),  # noqa: E501
+        ('global.get 1', GlobalOp.from_opcode(BinaryOpcode.GET_GLOBAL, GlobalIdx(1))),
+        ('global.set $i', UnresolvedVariableOp(BinaryOpcode.SET_GLOBAL, UnresolvedGlobalIdx('$i'))),  # noqa: E501
+        ('global.set 1', GlobalOp.from_opcode(BinaryOpcode.SET_GLOBAL, GlobalIdx(1))),
     ),
     with_parser(
-        grammar.expr,
-        ('(i32.load)', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD, MemoryArg(0, 4))),
-        ('(i64.load)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD, MemoryArg(0, 8))),
-        ('(f32.load)', MemoryOp.from_opcode(BinaryOpcode.F32_LOAD, MemoryArg(0, 4))),
-        ('(f64.load)', MemoryOp.from_opcode(BinaryOpcode.F64_LOAD, MemoryArg(0, 8))),
-        ('(i32.load8_s)', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD8_S, MemoryArg(0, 1))),
-        ('(i32.load8_u)', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD8_U, MemoryArg(0, 1))),
-        ('(i32.load16_s)', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD16_S, MemoryArg(0, 2))),
-        ('(i32.load16_u)', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD16_U, MemoryArg(0, 2))),
-        ('(i64.load8_s)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD8_S, MemoryArg(0, 1))),
-        ('(i64.load8_u)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD8_U, MemoryArg(0, 1))),
-        ('(i64.load16_s)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD16_S, MemoryArg(0, 2))),
-        ('(i64.load16_u)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD16_U, MemoryArg(0, 2))),
-        ('(i64.load32_s)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD32_S, MemoryArg(0, 4))),
-        ('(i64.load32_u)', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD32_U, MemoryArg(0, 4))),
-        ('(i32.store)', MemoryOp.from_opcode(BinaryOpcode.I32_STORE, MemoryArg(0, 4))),
-        ('(i64.store)', MemoryOp.from_opcode(BinaryOpcode.I64_STORE, MemoryArg(0, 8))),
-        ('(f32.store)', MemoryOp.from_opcode(BinaryOpcode.F32_STORE, MemoryArg(0, 4))),
-        ('(f64.store)', MemoryOp.from_opcode(BinaryOpcode.F64_STORE, MemoryArg(0, 8))),
-        ('(i32.store8)', MemoryOp.from_opcode(BinaryOpcode.I32_STORE8, MemoryArg(0, 1))),
-        ('(i32.store16)', MemoryOp.from_opcode(BinaryOpcode.I32_STORE16, MemoryArg(0, 2))),
-        ('(i64.store8)', MemoryOp.from_opcode(BinaryOpcode.I64_STORE8, MemoryArg(0, 1))),
-        ('(i64.store16)', MemoryOp.from_opcode(BinaryOpcode.I64_STORE16, MemoryArg(0, 2))),
-        ('(i64.store32)', MemoryOp.from_opcode(BinaryOpcode.I64_STORE32, MemoryArg(0, 4))),
+        grammar.instr,
+        ('i32.load', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD, MemoryArg(0, 4))),
+        ('i64.load', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD, MemoryArg(0, 8))),
+        ('f32.load', MemoryOp.from_opcode(BinaryOpcode.F32_LOAD, MemoryArg(0, 4))),
+        ('f64.load', MemoryOp.from_opcode(BinaryOpcode.F64_LOAD, MemoryArg(0, 8))),
+        ('i32.load8_s', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD8_S, MemoryArg(0, 1))),
+        ('i32.load8_u', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD8_U, MemoryArg(0, 1))),
+        ('i32.load16_s', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD16_S, MemoryArg(0, 2))),
+        ('i32.load16_u', MemoryOp.from_opcode(BinaryOpcode.I32_LOAD16_U, MemoryArg(0, 2))),
+        ('i64.load8_s', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD8_S, MemoryArg(0, 1))),
+        ('i64.load8_u', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD8_U, MemoryArg(0, 1))),
+        ('i64.load16_s', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD16_S, MemoryArg(0, 2))),
+        ('i64.load16_u', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD16_U, MemoryArg(0, 2))),
+        ('i64.load32_s', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD32_S, MemoryArg(0, 4))),
+        ('i64.load32_u', MemoryOp.from_opcode(BinaryOpcode.I64_LOAD32_U, MemoryArg(0, 4))),
+        ('i32.store', MemoryOp.from_opcode(BinaryOpcode.I32_STORE, MemoryArg(0, 4))),
+        ('i64.store', MemoryOp.from_opcode(BinaryOpcode.I64_STORE, MemoryArg(0, 8))),
+        ('f32.store', MemoryOp.from_opcode(BinaryOpcode.F32_STORE, MemoryArg(0, 4))),
+        ('f64.store', MemoryOp.from_opcode(BinaryOpcode.F64_STORE, MemoryArg(0, 8))),
+        ('i32.store8', MemoryOp.from_opcode(BinaryOpcode.I32_STORE8, MemoryArg(0, 1))),
+        ('i32.store16', MemoryOp.from_opcode(BinaryOpcode.I32_STORE16, MemoryArg(0, 2))),
+        ('i64.store8', MemoryOp.from_opcode(BinaryOpcode.I64_STORE8, MemoryArg(0, 1))),
+        ('i64.store16', MemoryOp.from_opcode(BinaryOpcode.I64_STORE16, MemoryArg(0, 2))),
+        ('i64.store32', MemoryOp.from_opcode(BinaryOpcode.I64_STORE32, MemoryArg(0, 4))),
         # TODO: tests that include offsets and alignments
     ),
     with_parser(
-        grammar.expr,
-        ('(memory.size)', MemorySize()),
-        ('(memory.grow)', MemoryGrow()),
+        grammar.instr,
+        ('memory.size', MemorySize()),
+        ('memory.grow', MemoryGrow()),
     ),
     with_parser(
-        grammar.expr,
-        ('(return)', RETURN),
-        ('(return (i32.const 1))', (I32_CONST_1, RETURN)),
+        grammar.instr,
+        ('return', RETURN),
+        ('(return (i32.const 1))', (I32_CONST_1, RETURN, END)),
     ),
     with_parser(
-        grammar.expr,
-        ('(nop)', Nop()),
+        grammar.instr,
+        ('nop', Nop()),
+        ('unreachable', UNREACHABLE),
     ),
     with_parser(
-        grammar.expr,
-        ('(unreachable)', UNREACHABLE),
+        grammar.instr,
+        ('call $func-name', UnresolvedCall(UnresolvedFunctionIdx('$func-name'))),
+        ('call 1', Call(FunctionIdx(1))),
     ),
     with_parser(
-        grammar.expr,
-        ('(call $func-name)', UnresolvedCall(UnresolvedFunctionIdx('$func-name'))),
-        ('(call 1)', Call(FunctionIdx(1))),
-    ),
-    with_parser(
-        grammar.expr,
-        ('(call_indirect (result))', UnresolvedCallIndirect(UnresolvedFunctionType((), ()))),
+        grammar.instr,
+        ('call_indirect (result)', UnresolvedCallIndirect(UnresolvedFunctionType((), ()))),
         (
-            '(call_indirect (param i64))',
+            'call_indirect (param i64)',
             UnresolvedCallIndirect(UnresolvedFunctionType((pi64,), ())),
         ),
         (
-            '(call_indirect (param i64) (result i32))',
+            'call_indirect (param i64) (result i32)',
             UnresolvedCallIndirect(UnresolvedFunctionType((pi64,), (i32,))),
         ),
         (
-            '(call_indirect (param i64) (param) (param f64 i32 i64))',
+            'call_indirect (param i64) (param) (param f64 i32 i64)',
             UnresolvedCallIndirect(UnresolvedFunctionType((pi64, pf64, pi32, pi64), ())),
         ),
         (
-            '(call_indirect (param) (param i64) (param) (param f64 i32 i64) (param) (param) (result) (result i32) (result) (result))',  # noqa: E501
+            'call_indirect (param) (param i64) (param) (param f64 i32 i64) (param) (param) (result) (result i32) (result) (result)',  # noqa: E501
             UnresolvedCallIndirect(UnresolvedFunctionType((pi64, pf64, pi32, pi64), (i32,))),
         ),
         (
-            '(call_indirect (type $check))',
+            'call_indirect (type $check)',
             UnresolvedCallIndirect(UnresolvedTypeIdx('$check')),
         ),
         (
-            '(call_indirect (type $over-i64) (param i64) (result i64))',
+            'call_indirect (type $over-i64) (param i64) (result i64)',
             UnresolvedCallIndirect(LinkedFunctionType(UnresolvedTypeIdx('$over-i64'), UnresolvedFunctionType((pi64,), (i64,)))),  # noqa: E501
         ),
     ),
     with_parser(
-        grammar.expr,
-        # folded
-        ('(block)', Block((), End.as_tail())),
-        ('(block $blk)', NamedBlock('$blk', Block((), End.as_tail()))),
-        ('(block (nop))', Block((), (Nop(), END))),
-        ('(block nop)', Block((), (Nop(), END))),
+        grammar.instr,
+        ('br 0', Br(LabelIdx(0))),
+        ('br $i', UnresolvedBr(UnresolvedLabelIdx('$i'))),
+        ('br_if 0', BrIf(LabelIdx(0))),
+        ('br_if $i', UnresolvedBrIf(UnresolvedLabelIdx('$i'))),
+        ('br_table 1 2 3', BrTable((LabelIdx(1), LabelIdx(2)), LabelIdx(3))),
         (
-            '(block (result i32) (i32.const 7))',
-            Block((i32,), (I32_CONST_7, END)),
-        ),
-        (
-            '(block (call $dummy))',
-            Block((), (UnresolvedCall(UnresolvedFunctionIdx('$dummy')), END)),
-        ),
-        (
-            '(block (result i32) (i32.ctz (return (i32.const 1))))',
-            Block(
-                (i32,),
-                (
-                    I32_CONST_1,
-                    RETURN,
-                    UnOp.from_opcode(BinaryOpcode.I32_CTZ),
-                    END,
-                )
-            ),
-        ),
-    ),
-    with_parser(
-        grammar.expr,
-        ('(br 0)', Br(LabelIdx(0))),
-        ('(br $i)', UnresolvedBr(UnresolvedLabelIdx('$i'))),
-        ('(br_if 0)', BrIf(LabelIdx(0))),
-        ('(br_if $i)', UnresolvedBrIf(UnresolvedLabelIdx('$i'))),
-        ('(br_table 1 2 3)', BrTable((LabelIdx(1), LabelIdx(2)), LabelIdx(3))),
-        (
-            '(br_table 1 2 $default)',
+            'br_table 1 2 $default',
             UnresolvedBrTable((LabelIdx(1), LabelIdx(2)), UnresolvedLabelIdx('$default')),
         ),
         (
-            '(br_table 1 2 $three 4)',
+            'br_table 1 2 $three 4',
             UnresolvedBrTable(
                 (LabelIdx(1), LabelIdx(2), UnresolvedLabelIdx('$three')),
                 LabelIdx(4),
@@ -424,7 +396,51 @@ SEXPRESSION_TESTS = tuple(concatv(
         ),
     ),
     with_parser(
+        grammar.instr,
+        # blocks
+        ('block end', Block((), End.as_tail())),
+        ('block $blk end', NamedBlock('$blk', Block((), End.as_tail()))),
+        ('block nop end', Block((), (Nop(), END))),
+        ('block nop end', Block((), (Nop(), END))),
+    ),
+    with_parser(
         grammar.expr,
+        # folded blocks
+        ('(block)', (Block((), End.as_tail()), END)),
+        ('(block $blk)', (NamedBlock('$blk', Block((), End.as_tail())), END)),
+        ('(block (nop))', (Block((), (Nop(), END)), END)),
+        ('(block nop)', (Block((), (Nop(), END)), END)),
+        (
+            '(block (result i32) (i32.const 7))',
+            (Block((i32,), (I32_CONST_7, END)), END),
+        ),
+        (
+            '(block (call $dummy))',
+            (Block((), (UnresolvedCall(UnresolvedFunctionIdx('$dummy')), END)), END),
+        ),
+        (
+            '(block (result i32) (i32.ctz (return (i32.const 1))))',
+            (
+                Block(
+                    (i32,),
+                    (
+                        I32_CONST_1,
+                        RETURN,
+                        UnOp.from_opcode(BinaryOpcode.I32_CTZ),
+                        END,
+                    )
+                ),
+                END,
+            ),
+        ),
+    ),
+    # with_parser(
+    #     grammar.instr,
+    #     TODO: non-folded loops
+    # ),
+    with_parser(
+        grammar.expr,
+        # folded loops
         ('(loop)', Loop((), End.as_tail())),
         ('(loop $l)', NamedLoop('$l', Loop((), END_TAIL))),
         ('(loop (nop))', Loop((), (Nop(), END))),
@@ -437,8 +453,13 @@ SEXPRESSION_TESTS = tuple(concatv(
             Loop((), (UnresolvedCall(UnresolvedFunctionIdx('$dummy')), END)),
         ),
     ),
+    # with_parser(
+    #     grammar.instr,
+    #     TODO: non-folded if
+    # ),
     with_parser(
-        grammar.exprs,
+        grammar.expr,
+        # folded if
         ('(if (local.get 0) (then))', (LOCAL_ZERO_OP, BASIC_IF_INSTR)),
         ('(if (local.get 0) (then) (else))', (LOCAL_ZERO_OP, BASIC_IF_INSTR)),
         ('(if $l (local.get 0) (then))', (LOCAL_ZERO_OP, NAMED_BASIC_IF_INSTR)),
@@ -447,8 +468,8 @@ SEXPRESSION_TESTS = tuple(concatv(
         ('(if (local.get 0) (then (nop)) (else (nop)))', (LOCAL_ZERO_OP, NOP_IF_WITH_NOP_ELSE_INSTR)),  # noqa: E501
     ),
     with_parser(
-        # Test folded instructions
-        grammar.exprs,
+        # folded instructions
+        grammar.instr,
         (
             '(i32.add (local.get 1) (i32.const 2))',
             (
@@ -487,6 +508,7 @@ SEXPRESSION_TESTS = tuple(concatv(
         (COMPLEX_FUNCTION_SEXPR, COMPLEX_FUNCTION),
         ('(func (local))', UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL)),
         # function declarations w/inline exports
+        # TODO: extract to separate test and declaration
         ('(func (export "f"))', UnresolvedExport("f", UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL))),  # noqa: E501
         ('(func (export "f") (type $a))', UnresolvedExport("f", UnresolvedFunction(type=UnresolvedTypeIdx('$a'), locals=(), body=END_TAIL))),  # noqa: E501
     ),
@@ -494,17 +516,37 @@ SEXPRESSION_TESTS = tuple(concatv(
         grammar.folded_function_import,
         # function imports
         (
-            '(func $a (import "spectest" "$a") (param i32))',
-            UnresolvedImport(module_name="spectest", as_name="$a", desc=LinkedFunctionType(UnresolvedTypeIdx('$a'), UnresolvedFunctionType((pi32,), ()))),  # noqa: E501
+            '(func $a (import "m" "f") (param i32))',
+            (
+                UnresolvedImport(module_name="m", as_name="f", desc=LinkedFunctionType(UnresolvedTypeIdx('$a'), UnresolvedFunctionType((pi32,), ()))),  # noqa: E501
+            ),
         ),
-        # (
-        #     '(func (export "p1") (import "spectest" "print_i32") (param i32))',
-        #     TODO,
-        # ),
-        # (
-        #     '(func $p (export "p2") (import "spectest" "print_i32") (param i32))',
-        #     TODO
-        # ),
+        (
+            '(func (export "e") (import "m" "f") (param i32))',
+            (
+                UnresolvedExport("e", UnresolvedFunctionType((pi32,), ())),
+                UnresolvedImport("m", "f", UnresolvedFunctionType((pi32,), ())),
+            ),
+        ),
+        (
+            '(func $p (export "e") (import "m" "f") (param i32))',
+            (
+                UnresolvedExport("e", LinkedFunctionType(UnresolvedTypeIdx('$p'), UnresolvedFunctionType((pi32,), ()))),  # noqa: E501
+                UnresolvedImport("m", "f", LinkedFunctionType(UnresolvedTypeIdx('$p'), UnresolvedFunctionType((pi32,), ()))),  # noqa: E501
+            ),
+        ),
+        (
+            '(func (export "e1") (export "e2") (import "m" "f") (param i32))',
+            (
+                UnresolvedExport("e1", UnresolvedFunctionType((pi32,), ())),
+                UnresolvedExport("e2", UnresolvedFunctionType((pi32,), ())),
+                UnresolvedImport("m", "f", UnresolvedFunctionType((pi32,), ())),
+            ),
+        ),
+    ),
+    with_parser(
+        grammar._global,
+        ('(global $a i32 (i32.const 2))', NamedGlobal('$a', Global(GlobalType.const(i32), (I32_CONST_2, END)))),  # noqa: E501
     ),
 ))
 

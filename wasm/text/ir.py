@@ -12,6 +12,7 @@ from wasm.datatypes import (
     TypeIdx,
     LabelIdx,
     ValType,
+    GlobalType,
 )
 from wasm.instructions.control import (
     Block,
@@ -194,3 +195,9 @@ class UnresolvedImport(NamedTuple):
         UnresolvedMemoryIdx,
         UnresolvedTableIdx,
     ]
+
+
+@register
+class NamedGlobal(NamedTuple):
+    name: str
+    global_: GlobalType

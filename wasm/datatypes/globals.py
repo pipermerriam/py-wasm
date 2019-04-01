@@ -27,6 +27,14 @@ class GlobalType(NamedTuple):
     mut: Mutability
     valtype: ValType
 
+    @classmethod
+    def var(cls, valtype: ValType):
+        return cls(Mutability.var, valtype)
+
+    @classmethod
+    def const(cls, valtype: ValType):
+        return cls(Mutability.const, valtype)
+
 
 class Global(NamedTuple):
     type: GlobalType

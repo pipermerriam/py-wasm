@@ -73,6 +73,43 @@ def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
 
 
 #
+# Functions
+#
+def parse_function(s, loc, toks):
+    name, export_name, typeuse, locals, base_body = toks
+
+    if typeuse is None:
+        typeuse = ir.UnresolvedFunctionType((), ())
+    if locals is None:
+        locals = ()
+
+    if base_body is None:
+        body = instructions.End.as_tail()
+    else:
+        body = base_body + instructions.End.as_tail()
+
+    function = ir.UnresolvedFunction(
+        type=typeuse,
+        locals=locals,
+        body=body,
+        name=name,
+    )
+
+    if export_name:
+        return ir.UnresolvedExport(export_name, function)
+    else:
+        return function
+
+
+def parse_function_import(s, loc, toks):
+    name, module_name, as_name, typeuse = toks
+    assert typeuse is not None  # TODO: verify that typeuse is indeed required
+    assert name is not None  # TODO: verify that name is indeed required
+    desc = ir.LinkedFunctionType(ir.UnresolvedTypeIdx(name), typeuse)
+    return ir.UnresolvedImport(module_name, as_name, desc)
+
+
+#
 # Exports
 #
 def parse_export(s, loc, toks):

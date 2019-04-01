@@ -2,6 +2,7 @@ import functools
 import operator
 
 from pyparsing import (
+    Regex,
     OneOrMore,
     matchPreviousExpr,
     Or,
@@ -34,20 +35,26 @@ ws = Optional(WHITESPACE).suppress()
 open = Literal('(').suppress()
 close = Literal(')').suppress()
 
-NUM = Word(nums).setParseAction(parsers.parse_integer_string)
-HEXVAL = Word(hexnums, exact=2)
-HEXNUM = OneOrMore(HEXVAL)
-
 # these should not be suppressed as they are used to build text representations
 # of opcodes
 ZEROX = Literal('0x')
 DOT = Literal('.')
 UNDERSCORE = Literal('_')
 
+# a supressed underscore
+LODASH = UNDERSCORE.copy().suppress()
+
+HEXDIGIT = Word(hexnums, exact=1)
+HEXNUM = Combine(HEXDIGIT + ZeroOrMore(Optional(LODASH) + HEXDIGIT))
+
 HEX = ZEROX + HEXNUM
 
 PLUS = Literal('+')
 MINUS = Literal('-')
+
+
+DIGIT = Word(nums, exact=1)
+NUM = Combine(DIGIT + ZeroOrMore(Optional(LODASH) + DIGIT)).setParseAction(parsers.parse_integer_string)  # noqa: E501
 
 NAT = NUM ^ HEX
 INT = NAT ^ Combine(PLUS + NAT) ^ Combine(MINUS + NAT)
@@ -61,13 +68,32 @@ NAME = Combine(Literal('$') + Word(namechars))
 
 DOUBLE_QUOTE = Literal('"').suppress()
 
-string_chars = Word(alphanums + "\n\t\r\\' ")
-string_escaped_unicode = Literal("\\u") + HEXNUM
-string_raw_hex = Literal("\\") + HEXVAL
-stringbody = string_chars ^ string_raw_hex ^ string_escaped_unicode
+string_chars = Regex(
+    r'['
+    r'\u0020\u0021'
+    # exclude \u0022: doublequote
+    r'\u0023-\u0026'
+    # exclude \u0027: singlequote
+    r'\u0028-\u007e'
+    # exclude \u007f: excluded by spec
+    r'\u0080-\uD7FF'
+    r'\U0000E000-\U0010FFFF'
+    r']+'
+)
+string_escaped_values = any_literal(
+    r"\n",
+    r"\t",
+    r"\r",
+    r"\\",
+    r"\'",
+    r'\"',
+).setParseAction(parsers._assert_false)
+string_escaped_unicode = Combine(Literal("\\u{") + HEXNUM + Literal('}')).setParseAction(parsers._assert_false)  # noqa: E501
+string_escaped_hex_char = Combine(Literal("\\") + HEXDIGIT + HEXDIGIT).setParseAction(parsers._assert_false)  # noqa: E501
+stringbody = string_chars ^ string_escaped_values ^ string_escaped_unicode ^ string_escaped_hex_char
 
 # TODO: this doesn't fully cover the allowed characters.
-string = Combine(DOUBLE_QUOTE + stringbody + DOUBLE_QUOTE)
+STRING = Combine(DOUBLE_QUOTE + ZeroOrMore(stringbody) + DOUBLE_QUOTE)
 
 VAR = NAT ^ NAME
 VALUE = INT ^ FLOAT
@@ -349,18 +375,13 @@ export_table = TABLE + ws + table_idx
 export_memory = MEMORY + ws + memory_idx
 
 export_kind = open + (export_function ^ export_global ^ export_table ^ export_memory) + close
-export = (open + EXPORT + ws + string + ws + export_kind + close).setParseAction(parsers.parse_export)  # noqa: E501
+export = (open + EXPORT + ws + STRING + ws + export_kind + close).setParseAction(parsers.parse_export)  # noqa: E501
 exports = export + ZeroOrMore(ws + export)
 
 IMPORT = Literal("import").suppress()
 
-export_inline = open + EXPORT + ws + string + close
-import_inline = open + IMPORT + OneOrMore(ws + string) + close
+export_inline = open + EXPORT + ws + STRING + close
+import_inline = open + IMPORT + ws + STRING + ws + STRING + close
 
-function = open + FUNC + maybe(name) + maybe(export) + typeuse + maybe(locals) + maybe(instrs) + close  # noqa: E501
-function_imports = open + FUNC + maybe(name) + ws + import_inline + maybe(typeuse) + close
-
-"""
-( func <name>? <func_type> <local>* <instr>* )
-( func <name>? ( export <string> ) <...> )                         ;; = (export <string> (func <N>)) (func <name>? <...>)
-( func <name>? ( import <string> <string> ) <func_type>)
+function = (open + FUNC + maybe(NAME) + maybe(export_inline) + maybe(typeuse) + maybe(locals) + maybe(instrs) + close).setParseAction(parsers.parse_function)  # noqa: E501
+folded_function_import = (open + FUNC + maybe(NAME) + ws + import_inline + maybe(typeuse) + close).setParseAction(parsers.parse_function_import)  # noqa: E501

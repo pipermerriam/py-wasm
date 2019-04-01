@@ -12,7 +12,6 @@ from wasm.datatypes import (
     TypeIdx,
     LabelIdx,
     ValType,
-    Function,
 )
 from wasm.instructions.control import (
     Block,
@@ -172,19 +171,26 @@ class NamedIf(NamedTuple):
 
 
 @register
-class UnresolvedExport(NamedTuple):
-    name: str
-    function_idx: UnresolvedFunctionIdx
-
-
-@register
 class UnresolvedFunction(NamedTuple):
     type: Union[None, UnresolvedTypeIdx, UnresolvedFunctionType]
     locals: Tuple[ValType, ...]
     body: Tuple['BaseInstruction', ...]
+    name: Optional[str] = None
 
 
 @register
-class NamedFunction(NamedTuple):
+class UnresolvedExport(NamedTuple):
     name: str
-    function: Function
+    desc: Union[UnresolvedFunctionIdx, UnresolvedGlobalIdx, UnresolvedMemoryIdx, UnresolvedTableIdx]
+
+
+@register
+class UnresolvedImport(NamedTuple):
+    module_name: str
+    as_name: str
+    desc: Union[
+        LinkedFunctionType,  # TODO: UnresolvedTypeIdx? also
+        UnresolvedGlobalIdx,
+        UnresolvedMemoryIdx,
+        UnresolvedTableIdx,
+    ]

@@ -1,4 +1,5 @@
 import uuid
+from typing import NamedTuple
 
 import numpy
 
@@ -8,6 +9,7 @@ from wasm._utils.toolz import (
     complement,
 )
 from wasm._utils.decorators import to_tuple
+from wasm._utils.memory import round_up_to_page
 from wasm import datatypes
 from wasm import instructions
 from wasm.opcodes import (
@@ -33,15 +35,21 @@ def any_unresolved(*values):
 
 all_resolved = complement(any_unresolved)
 
+RESOLVED_TYPES = (
+    instructions.BaseInstruction,
+    datatypes.Idx,
+    datatypes.GlobalType,
+    datatypes.TableType,
+    datatypes.MemoryType,
+)
+
 
 def _is_unresolved(value):
     if isinstance(value, ir.BaseUnresolved):
         return True
-    elif isinstance(value, instructions.BaseInstruction):
+    elif isinstance(value, RESOLVED_TYPES):
         return False
-    elif isinstance(value, datatypes.Idx):
-        return False
-    elif isinstance(value, tuple):
+    elif isinstance(value, tuple) and not isinstance(value, NamedTuple):
         return any(_is_unresolved(item) for item in value)
     else:
         raise Exception(f"INVALID TYPE: {value}")
@@ -51,11 +59,35 @@ def _assert_false(s, loc, toks):
     assert False
 
 
+def _mk_exports_and_import(idx_class, name, export_names, import_data):
+    idx = idx_class(name)
+    exports = tuple(
+        ir.UnresolvedExport(export_name, idx)
+        for export_name
+        in export_names
+    )
+    if import_data:
+        module_name, as_name = import_data
+        _import = ir.UnresolvedImport(
+            module_name,
+            as_name,
+            idx,
+        )
+    else:
+        _import = None
+
+    return exports, _import
+
+
 #
 # Common Parsers
 #
 def concatenate_tokens(s, loc, toks):
     return tuple(concat(toks))
+
+
+def parse_to_tuple(s, loc, toks):
+    return tuple(toks)
 
 
 @curry
@@ -80,19 +112,36 @@ def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
 # Memory
 #
 def parse_memory(s, loc, toks):
-    name, limits = toks
-    memory_type = datatypes.MemoryType(limits.min, limits.max)
+    name, export_names, import_data, memory_type = toks
     base_memory = datatypes.Memory(memory_type)
 
-    if name is not None:
-        return ir.NamedMemory(name, base_memory)
-    else:
-        return base_memory
+    if name is None and (export_names or import_data):
+        name = str(uuid.uuid4())
+    elif name is None:
+        return (), None, base_memory
+
+    memory = ir.NamedMemory(name, base_memory)
+
+    exports, _import = _mk_exports_and_import(
+        ir.UnresolvedMemoryIdx,
+        name,
+        export_names,
+        import_data,
+    )
+
+    return exports, _import, memory
+
+
+def parse_memory_type(s, loc, toks):
+    min, max = toks
+    return datatypes.MemoryType(min, max)
 
 
 def parse_memory_with_data(s, loc, toks):
     name, data = toks
-    memory_size = len(data)
+    raw_memory_size = len(data)
+    memory_size = round_up_to_page(raw_memory_size)
+
     base_memory = datatypes.Memory(datatypes.MemoryType(memory_size, memory_size))
 
     if name is None:
@@ -134,37 +183,23 @@ def parse_table_with_elements(s, loc, toks):
     return table, element_segment
 
 
-def parse_elements_inline(s, loc, toks):
-    return tuple(toks)
-
-
 def parse_table(s, loc, toks):
     name, export_names, import_data, table_type = toks
-    assert not export_names
-    assert not import_data
     base_table = datatypes.Table(table_type)
     if name is None and (export_names or import_data):
-        name = uuid.uuid4()
+        name = str(uuid.uuid4())
 
     if name is None:
         return (), None, base_table
 
     table = ir.NamedTable(name, base_table)
-    table_idx = ir.UnresolvedTableIdx(name)
-    exports = tuple(
-        ir.UnresolvedExport(export_name)
-        for export_name
-        in export_names
+
+    exports, _import = _mk_exports_and_import(
+        ir.UnresolvedTableIdx,
+        name,
+        export_names,
+        import_data,
     )
-    if import_data:
-        module_name, as_name = import_data
-        _import = ir.UnresolvedImport(
-            module_name,
-            as_name,
-            table_idx,
-        )
-    else:
-        _import = None
 
     return exports, _import, table
 
@@ -235,9 +270,25 @@ def parse_function(s, loc, toks):
 #
 # Imports
 #
+def parse_import(s, loc, toks):
+    module_name, as_name, desc = toks
+    if all_resolved(desc):
+        return datatypes.Import(module_name, as_name, desc)
+    else:
+        return ir.UnresolvedImport(module_name, as_name, desc)
+
+
+def parse_import_function(s, loc, toks):
+    typeuse = _exactly_one(toks)
+    if typeuse is None:
+        return ir.UnresolvedFunctionType((), ())
+    else:
+        return typeuse
+
+
 @to_tuple
 def parse_folded_function_import(s, loc, toks):
-    name, export_names, module_name, as_name, typeuse = toks
+    name, export_names, (module_name, as_name), typeuse = toks
     assert typeuse is not None  # TODO: verify that typeuse is indeed required
 
     if name is None:
@@ -256,10 +307,6 @@ def parse_folded_function_import(s, loc, toks):
 def parse_export(s, loc, toks):
     name, descriptor = toks
     return datatypes.Export(name, descriptor)
-
-
-def parse_export_names(s, loc, toks):
-    return tuple(toks)
 
 
 #
@@ -527,10 +574,6 @@ def parse_limits(s, loc, toks):
 
 def parse_valtype(s, loc, toks):
     return datatypes.ValType.from_str(_exactly_one(toks))
-
-
-def parse_valtypes(s, loc, toks):
-    return tuple(toks)
 
 
 #

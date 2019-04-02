@@ -124,7 +124,7 @@ F32 = Literal("f32")
 F64 = Literal("f64")
 
 VALTYPE = (I32 ^ I64 ^ F32 ^ F64).setParseAction(parsers.parse_valtype)
-valtypes = (VALTYPE + ZeroOrMore(ws + VALTYPE)).setParseAction(parsers.parse_valtypes)
+valtypes = (VALTYPE + ZeroOrMore(ws + VALTYPE)).setParseAction(parsers.parse_to_tuple)
 
 LOCAL = Literal('local').suppress()
 
@@ -389,6 +389,21 @@ GLOBAL = Literal("global").suppress()
 TABLE = Literal("table").suppress()
 MEMORY = Literal("memory").suppress()
 
+MUT = Literal("mut").suppress()
+
+global_const = VALTYPE.copy().setParseAction(parsers.parse_valtype, parsers.parse_global_const)
+global_mut = (open + MUT + ws + VALTYPE + close).setParseAction(parsers.parse_global_mut)
+global_type = global_const ^ global_mut
+
+limits = (NAT + maybe(NAT)).setParseAction(parsers.parse_limits)
+
+FUNCREF = Literal("funcref").suppress()
+
+elem_type = FUNCREF.setParseAction(parsers.parse_elem_type)
+table_type = (limits + ws + elem_type).setParseAction(parsers.parse_table_type)
+
+memory_type = limits.copy().setParseAction(parsers.parse_memory_type)
+
 export_function = FUNC + ws + function_idx
 export_global = GLOBAL + ws + global_idx
 export_table = TABLE + ws + table_idx
@@ -400,31 +415,27 @@ exports = export + ZeroOrMore(ws + export)
 
 IMPORT = Literal("import").suppress()
 
-export_inline = open + EXPORT + ws + STRING + close
-import_inline = open + IMPORT + ws + STRING + ws + STRING + close
+import_function = (FUNC + maybe(typeuse)).setParseAction(parsers.parse_import_function)
+import_global = GLOBAL + ws + global_type
+import_table = TABLE + ws + table_type
+import_memory = MEMORY + ws + memory_type
 
-inline_exports = (export_inline + ZeroOrMore(ws + export_inline)).setParseAction(parsers.parse_export_names)  # noqa: E501
+import_kind = open + (import_function ^ import_global ^ import_table ^ import_memory) + close
+import_ = (open + IMPORT + ws + STRING + ws + STRING + ws + import_kind + close).setParseAction(parsers.parse_import)  # noqa: E501
+
+export_inline = open + EXPORT + ws + STRING + close
+import_inline = (open + IMPORT + ws + STRING + ws + STRING + close).setParseAction(parsers.parse_to_tuple)  # noqa: E501
+
+inline_exports = (export_inline + ZeroOrMore(ws + export_inline)).setParseAction(parsers.parse_to_tuple)  # noqa: E501
 
 function = (open + FUNC + maybe(SYMBOL_ID) + maybe(export_inline) + maybe(typeuse) + maybe(locals) + maybe(instrs) + close).setParseAction(parsers.parse_function)  # noqa: E501
 folded_function_import = (open + FUNC + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + ws + import_inline + maybe(typeuse) + close).setParseAction(parsers.parse_folded_function_import)  # noqa: E501
 
-MUT = Literal("mut").suppress()
-
-global_const = VALTYPE.copy().setParseAction(parsers.parse_valtype, parsers.parse_global_const)
-global_mut = (open + MUT + ws + VALTYPE + close).setParseAction(parsers.parse_global_mut)
-global_type = global_const ^ global_mut
-
 _global = (open + GLOBAL + maybe(SYMBOL_ID) + ws + global_type + ws + expr + close).setParseAction(parsers.parse_global)  # noqa: E501
-
-limits = (NAT + maybe(NAT)).setParseAction(parsers.parse_limits)
-
-FUNCREF = Literal("funcref").suppress()
-elem_type = FUNCREF.setParseAction(parsers.parse_elem_type)
-table_type = (limits + ws + elem_type).setParseAction(parsers.parse_table_type)
 
 ELEM = Literal("elem").suppress()
 
-elements_inline = (open + ELEM + maybe(function_idx + ZeroOrMore(ws + function_idx), default=()) + close).setParseAction(parsers.parse_elements_inline)  # noqa: E501
+elements_inline = (open + ELEM + maybe(function_idx + ZeroOrMore(ws + function_idx), default=()) + close).setParseAction(parsers.parse_to_tuple)  # noqa: E501
 
 table = (open + TABLE + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + maybe(import_inline) + ws + table_type + close).setParseAction(parsers.parse_table)  # noqa: E501
 table_with_elements = (open + TABLE + maybe(SYMBOL_ID) + ws + elem_type + ws + elements_inline + close).setParseAction(parsers.parse_table_with_elements)  # noqa: E501
@@ -434,5 +445,5 @@ DATA = Literal("data").suppress()
 datastring = (STRING + ZeroOrMore(ws + STRING)).setParseAction(parsers.parse_datastring)
 data_inline = open + DATA + maybe(datastring, b'') + close
 
-memory = (open + MEMORY + maybe(SYMBOL_ID) + ws + limits + close).setParseAction(parsers.parse_memory)  # noqa: E501
+memory = (open + MEMORY + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + maybe(import_inline) + ws + memory_type + close).setParseAction(parsers.parse_memory)  # noqa: E501
 memory_with_data = (open + MEMORY + maybe(SYMBOL_ID) + ws + data_inline + close).setParseAction(parsers.parse_memory_with_data)  # noqa: E501

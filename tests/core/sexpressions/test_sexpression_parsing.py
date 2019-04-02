@@ -1,8 +1,10 @@
 import numpy
 
+from wasm import constants
 from wasm._utils.decorators import to_tuple
 from wasm._utils.toolz import cons, concatv
 from wasm.datatypes import (
+    Import,
     Memory,
     MemoryType,
     Table,
@@ -536,6 +538,14 @@ SEXPRESSION_TESTS = tuple(concatv(
         ('(export "a" (memory $a))', UnresolvedExport("a", UnresolvedMemoryIdx("$a"))),
     ),
     with_parser(
+        grammar.import_,
+        ('(import "test" "func" (func))', UnresolvedImport("test", "func", UnresolvedFunctionType((), ()))),  # noqa: E501
+        ('(import "test" "func" (func (param i32)))', UnresolvedImport("test", "func", UnresolvedFunctionType((pi32,), ()))),  # noqa: E501
+        ('(import "test" "g" (global i32))', Import("test", "g", GlobalType.const(i32))),
+        ('(import "test" "t" (table 10 20 funcref))', Import("test", "t", TableType(Limits(10, 20), FunctionAddress))),  # noqa: E501
+        ('(import "test" "m" (memory 1 2))', Import("test", "m", MemoryType(1, 2))),
+    ),
+    with_parser(
         grammar.function,
         # function declarations
         ('(func)', UnresolvedFunction(type=EMPTY_FUNC_TYPE, locals=(), body=END_TAIL)),
@@ -593,6 +603,22 @@ SEXPRESSION_TESTS = tuple(concatv(
         grammar.table,
         ('(table 0 funcref)', ((), None, Table(TableType(Limits(0, None), FunctionAddress)),)),
         ('(table $t 10 funcref)', ((), None, NamedTable('$t', Table(TableType(Limits(10, None), FunctionAddress)))),),  # noqa: E501
+        (
+            '(table $t (export "a") 0 funcref)',
+            (
+                (UnresolvedExport('a', UnresolvedTableIdx('$t')),),
+                None,
+                NamedTable('$t', Table(TableType(Limits(0, None), FunctionAddress))),  # noqa: E501
+            ),
+        ),
+        (
+            '(table $t (import "test" "table") 10 20 funcref)',
+            (
+                (),
+                UnresolvedImport("test", "table", UnresolvedTableIdx('$t')),
+                NamedTable('$t', Table(TableType(Limits(10, 20), FunctionAddress))),  # noqa: E501
+            ),
+        )
     ),
     with_parser(
         grammar.table_with_elements,
@@ -620,12 +646,20 @@ SEXPRESSION_TESTS = tuple(concatv(
     ),
     with_parser(
         grammar.memory,
-        ('(memory 0 0)', Memory(MemoryType(0, 0))),
-        ('(memory 0 1)', Memory(MemoryType(0, 1))),
-        ('(memory 1 256)', Memory(MemoryType(1, 256))),
-        ('(memory 0 65536)', Memory(MemoryType(0, 65536))),
-        ('(memory 1)', Memory(MemoryType(1))),
-        ('(memory $m 1)', NamedMemory('$m', Memory(MemoryType(1)))),
+        ('(memory 0 0)', ((), None, Memory(MemoryType(0, 0)))),
+        ('(memory 0 1)', ((), None, Memory(MemoryType(0, 1)))),
+        ('(memory 1 256)', ((), None, Memory(MemoryType(1, 256)))),
+        ('(memory 0 65536)', ((), None, Memory(MemoryType(0, 65536)))),
+        ('(memory 1)', ((), None, Memory(MemoryType(1)))),
+        ('(memory $m 1)', ((), None, NamedMemory('$m', Memory(MemoryType(1))))),
+        (
+            '(memory $m (export "a") 0)',
+            (
+                (UnresolvedExport("a", UnresolvedMemoryIdx('$m')),),
+                None,
+                NamedMemory('$m', Memory(MemoryType(0)))
+            ),
+        ),
     ),
     with_parser(
         grammar.memory_with_data,
@@ -637,6 +671,17 @@ SEXPRESSION_TESTS = tuple(concatv(
                     memory_idx=UnresolvedMemoryIdx('$m'),
                     offset=(I32_CONST_0, END),
                     init=b'',
+                ),
+            ),
+        ),
+        (
+            '(memory $m (data "unicorns"))',
+            (
+                NamedMemory('$m', Memory(MemoryType(constants.PAGE_SIZE_64K, constants.PAGE_SIZE_64K))),  # noqa: E501
+                UnresolvedDataSegment(
+                    memory_idx=UnresolvedMemoryIdx('$m'),
+                    offset=(I32_CONST_0, END),
+                    init=b'unicorns',
                 ),
             ),
         ),

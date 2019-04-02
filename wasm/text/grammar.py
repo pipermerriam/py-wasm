@@ -2,6 +2,10 @@ import functools
 import operator
 
 from pyparsing import (
+    StringStart,
+    StringEnd,
+    LineEnd,
+    NoMatch,
     Regex,
     OneOrMore,
     matchPreviousExpr,
@@ -29,8 +33,8 @@ def maybe(thing, default=None):
     return Optional(ws + thing, default=default)
 
 
-linechar = Regex(r'[\u0000-\uD7FF\U0000E000-\U0010FFFF]+$')
-line_comment = Literal(";;").suppress() + linechar
+linechar = Regex(r'[\u0000-\uD7FF\U0000E000-\U0010FFFF]+')
+line_comment = Literal(";;").suppress() + linechar + LineEnd()
 block_char = Regex(
     r'('
     r'[\u0000-\u0027]|'
@@ -431,7 +435,7 @@ inline_exports = (export_inline + ZeroOrMore(ws + export_inline)).setParseAction
 function = (open + FUNC + maybe(SYMBOL_ID) + maybe(export_inline) + maybe(typeuse) + maybe(locals) + maybe(instrs) + close).setParseAction(parsers.parse_function)  # noqa: E501
 folded_function_import = (open + FUNC + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + ws + import_inline + maybe(typeuse) + close).setParseAction(parsers.parse_folded_function_import)  # noqa: E501
 
-_global = (open + GLOBAL + maybe(SYMBOL_ID) + ws + global_type + ws + expr + close).setParseAction(parsers.parse_global)  # noqa: E501
+global_ = (open + GLOBAL + maybe(SYMBOL_ID) + ws + global_type + ws + expr + close).setParseAction(parsers.parse_global)  # noqa: E501
 
 ELEM = Literal("elem").suppress()
 
@@ -447,3 +451,18 @@ data_inline = open + DATA + maybe(datastring, b'') + close
 
 memory = (open + MEMORY + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + maybe(import_inline) + ws + memory_type + close).setParseAction(parsers.parse_memory)  # noqa: E501
 memory_with_data = (open + MEMORY + maybe(SYMBOL_ID) + ws + data_inline + close).setParseAction(parsers.parse_memory_with_data)  # noqa: E501
+
+# TODO
+type = NoMatch()
+start = NoMatch()
+element_segment = NoMatch()
+data_segment = NoMatch()
+
+module_field = type ^ import_ ^ function ^ table ^ memory ^ global_ ^ export ^ start ^ element_segment ^ data_segment  # noqa: E501
+module_fields = module_field + ZeroOrMore(ws + module_field)
+
+
+MODULE = Literal("module")
+
+module = open + MODULE + maybe(SYMBOL_ID) + maybe(module_fields, ()) + close
+top_level_module = StringStart() + module_fields + StringEnd()

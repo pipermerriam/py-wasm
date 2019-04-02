@@ -590,7 +590,7 @@ SEXPRESSION_TESTS = tuple(concatv(
         ),
     ),
     with_parser(
-        grammar._global,
+        grammar.global_,
         ('(global $a i32 (i32.const 2))', NamedGlobal('$a', Global(GlobalType.const(i32), (I32_CONST_2, END)))),  # noqa: E501
         ('(global $a (mut i32) (i32.const 2))', NamedGlobal('$a', Global(GlobalType.var(i32), (I32_CONST_2, END)))),  # noqa: E501
         ('(global (;1;) i32 (i32.const 3))', Global(GlobalType.const(i32), (I32_CONST_3, END))),

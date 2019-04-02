@@ -3,6 +3,8 @@ import numpy
 from wasm._utils.decorators import to_tuple
 from wasm._utils.toolz import cons, concatv
 from wasm.datatypes import (
+    Memory,
+    MemoryType,
     Table,
     Limits,
     ValType,
@@ -68,6 +70,8 @@ from wasm.instructions.numeric import (
 )
 from wasm.text import grammar
 from wasm.text.ir import (
+    UnresolvedDataSegment,
+    NamedMemory,
     NamedGlobal,
     UnresolvedImport,
     UnresolvedExport,
@@ -587,8 +591,8 @@ SEXPRESSION_TESTS = tuple(concatv(
     ),
     with_parser(
         grammar.table,
-        ('(table 0 funcref)', Table(TableType(Limits(0, None), FunctionAddress))),
-        ('(table $t 10 funcref)', NamedTable('$t', Table(TableType(Limits(10, None), FunctionAddress)))),  # noqa: E501
+        ('(table 0 funcref)', ((), None, Table(TableType(Limits(0, None), FunctionAddress)),)),
+        ('(table $t 10 funcref)', ((), None, NamedTable('$t', Table(TableType(Limits(10, None), FunctionAddress)))),),  # noqa: E501
     ),
     with_parser(
         grammar.table_with_elements,
@@ -601,6 +605,41 @@ SEXPRESSION_TESTS = tuple(concatv(
             ),
         ),
         cmp_fn=cmp_table_with_elements,
+    ),
+    with_parser(
+        grammar.datastring,
+        ('""', b''),
+        ('"arst"', b'arst'),
+        ('"arst" "tsra"', b'arsttsra'),
+    ),
+    with_parser(
+        grammar.data_inline,
+        ('(data)', b''),
+        ('(data "arst")', b'arst'),
+        ('(data "arst" "tsra")', b'arsttsra'),
+    ),
+    with_parser(
+        grammar.memory,
+        ('(memory 0 0)', Memory(MemoryType(0, 0))),
+        ('(memory 0 1)', Memory(MemoryType(0, 1))),
+        ('(memory 1 256)', Memory(MemoryType(1, 256))),
+        ('(memory 0 65536)', Memory(MemoryType(0, 65536))),
+        ('(memory 1)', Memory(MemoryType(1))),
+        ('(memory $m 1)', NamedMemory('$m', Memory(MemoryType(1)))),
+    ),
+    with_parser(
+        grammar.memory_with_data,
+        (
+            '(memory $m (data))',
+            (
+                NamedMemory('$m', Memory(MemoryType(0, 0))),
+                UnresolvedDataSegment(
+                    memory_idx=UnresolvedMemoryIdx('$m'),
+                    offset=(I32_CONST_0, END),
+                    init=b'',
+                ),
+            ),
+        ),
     ),
 ))
 

@@ -77,6 +77,44 @@ def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
 
 
 #
+# Memory
+#
+def parse_memory(s, loc, toks):
+    name, limits = toks
+    memory_type = datatypes.MemoryType(limits.min, limits.max)
+    base_memory = datatypes.Memory(memory_type)
+
+    if name is not None:
+        return ir.NamedMemory(name, base_memory)
+    else:
+        return base_memory
+
+
+def parse_memory_with_data(s, loc, toks):
+    name, data = toks
+    memory_size = len(data)
+    base_memory = datatypes.Memory(datatypes.MemoryType(memory_size, memory_size))
+
+    if name is None:
+        name = uuid.uuid4()
+
+    memory = ir.NamedMemory(name, base_memory)
+    memory_idx = ir.UnresolvedMemoryIdx(name)
+    data_segment = ir.UnresolvedDataSegment(
+        memory_idx=memory_idx,
+        offset=(instructions.I32Const(numpy.uint32(0)), instructions.End()),
+        init=data,
+    )
+    return memory, data_segment
+
+
+def parse_datastring(s, loc, toks):
+    data = "".join(toks)
+    data_bytes = data.encode('utf8')
+    return data_bytes
+
+
+#
 # Table
 #
 def parse_table_with_elements(s, loc, toks):
@@ -101,12 +139,34 @@ def parse_elements_inline(s, loc, toks):
 
 
 def parse_table(s, loc, toks):
-    name, table_type = toks
+    name, export_names, import_data, table_type = toks
+    assert not export_names
+    assert not import_data
     base_table = datatypes.Table(table_type)
+    if name is None and (export_names or import_data):
+        name = uuid.uuid4()
+
     if name is None:
-        return base_table
+        return (), None, base_table
+
+    table = ir.NamedTable(name, base_table)
+    table_idx = ir.UnresolvedTableIdx(name)
+    exports = tuple(
+        ir.UnresolvedExport(export_name)
+        for export_name
+        in export_names
+    )
+    if import_data:
+        module_name, as_name = import_data
+        _import = ir.UnresolvedImport(
+            module_name,
+            as_name,
+            table_idx,
+        )
     else:
-        return ir.NamedTable(name, base_table)
+        _import = None
+
+    return exports, _import, table
 
 
 def parse_table_type(s, loc, toks):
@@ -163,6 +223,8 @@ def parse_function(s, loc, toks):
         body=body,
         name=name,
     )
+    # TODO: this needs to return a 2-tuple of (export, function) and generate a
+    # function name when none was provided)
 
     if export_name:
         return ir.UnresolvedExport(export_name, function)

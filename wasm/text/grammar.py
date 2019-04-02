@@ -426,5 +426,13 @@ ELEM = Literal("elem").suppress()
 
 elements_inline = (open + ELEM + maybe(function_idx + ZeroOrMore(ws + function_idx), default=()) + close).setParseAction(parsers.parse_elements_inline)  # noqa: E501
 
-table = (open + TABLE + maybe(SYMBOL_ID) + ws + table_type + close).setParseAction(parsers.parse_table)  # noqa: E501
+table = (open + TABLE + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + maybe(import_inline) + ws + table_type + close).setParseAction(parsers.parse_table)  # noqa: E501
 table_with_elements = (open + TABLE + maybe(SYMBOL_ID) + ws + elem_type + ws + elements_inline + close).setParseAction(parsers.parse_table_with_elements)  # noqa: E501
+
+DATA = Literal("data").suppress()
+
+datastring = (STRING + ZeroOrMore(ws + STRING)).setParseAction(parsers.parse_datastring)
+data_inline = open + DATA + maybe(datastring, b'') + close
+
+memory = (open + MEMORY + maybe(SYMBOL_ID) + ws + limits + close).setParseAction(parsers.parse_memory)  # noqa: E501
+memory_with_data = (open + MEMORY + maybe(SYMBOL_ID) + ws + data_inline + close).setParseAction(parsers.parse_memory_with_data)  # noqa: E501

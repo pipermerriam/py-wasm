@@ -15,6 +15,7 @@ from wasm.datatypes import (
     LabelIdx,
     ValType,
     Global,
+    Memory,
 )
 from wasm.instructions.control import (
     Block,
@@ -216,3 +217,16 @@ class UnresolvedElementSegment(NamedTuple):
     table_idx: Union[NamedTable, UnresolvedTableIdx]
     offset: Tuple['BaseInstruction', ...]
     init: Tuple[FunctionIdx, ...]
+
+
+@register
+class NamedMemory(NamedTuple):
+    name: str
+    table: Memory
+
+
+@register
+class UnresolvedDataSegment(NamedTuple):
+    memory_idx: UnresolvedMemoryIdx
+    offset: Tuple['BaseInstruction', ...]
+    init: bytes

@@ -3,6 +3,8 @@ import numpy
 from wasm._utils.decorators import to_tuple
 from wasm._utils.toolz import cons, concatv
 from wasm.datatypes import (
+    Table,
+    Limits,
     ValType,
     GlobalIdx,
     LabelIdx,
@@ -13,6 +15,8 @@ from wasm.datatypes import (
     MemoryIdx,
     GlobalType,
     Global,
+    TableType,
+    FunctionAddress,
 )
 from wasm.opcodes import (
     BinaryOpcode,
@@ -72,6 +76,7 @@ from wasm.text.ir import (
     NamedBlock,
     NamedIf,
     NamedLoop,
+    NamedTable,
     Param,
     UnresolvedBr,
     UnresolvedBrIf,
@@ -91,10 +96,27 @@ from wasm.text.ir import (
 )
 
 
+def _default_cmp_fn(result, expected):
+    assert len(result) == 1
+    actual = result[0]
+    assert actual == expected
+
+
+def cmp_table_with_elements(result, expected):
+    assert len(result) == 1
+    named_table, element_segment = result[0]
+    table, offset, init = expected
+    assert isinstance(element_segment.table_idx, UnresolvedTableIdx)
+    assert named_table.name == element_segment.table_idx.name
+    assert named_table.table == table
+    assert element_segment.offset == offset
+    assert element_segment.init == init
+
+
 @to_tuple
-def with_parser(parser, *tests):
+def with_parser(parser, *tests, cmp_fn=_default_cmp_fn):
     for test in tests:
-        yield tuple(cons(parser, test))
+        yield tuple(cons(parser, test)) + (cmp_fn,)
 
 
 UNOPS = tuple(op for op in BinaryOpcode if op.is_unop)
@@ -135,6 +157,7 @@ BASIC_IF_INSTR = If(result_type=(), instructions=ELSE_TAIL, else_instructions=EN
 NAMED_BASIC_IF_INSTR = NamedIf('$l', BASIC_IF_INSTR)
 NOP_IF_INSTR = If(result_type=(), instructions=(NOP, ELSE), else_instructions=END_TAIL)
 NOP_IF_WITH_NOP_ELSE_INSTR = If(result_type=(), instructions=(NOP, ELSE), else_instructions=(NOP, END))  # noqa: E501
+I32_CONST_0 = I32Const(numpy.uint32(0))
 I32_CONST_1 = I32Const(numpy.uint32(1))
 I32_CONST_2 = I32Const(numpy.uint32(2))
 I32_CONST_3 = I32Const(numpy.uint32(3))
@@ -165,6 +188,17 @@ SEXPRESSION_TESTS = tuple(concatv(
         grammar.STRING,
         ('"a"', "a"),
         ('"a_b"', "a_b"),
+    ),
+    with_parser(
+        grammar.comment,
+        (';;this is a line comment', "this is a line comment"),
+        ('(;this is a block comment;)', "this is a block comment"),
+        ('(;this is a\nblock comment;)', "this is a\nblock comment"),
+    ),
+    with_parser(
+        grammar.limits,
+        ('0', Limits(0, None)),
+        ('0 10', Limits(0, 10)),
     ),
     with_parser(
         grammar.locals,
@@ -336,7 +370,7 @@ SEXPRESSION_TESTS = tuple(concatv(
     with_parser(
         grammar.instr,
         ('return', RETURN),
-        ('(return (i32.const 1))', (I32_CONST_1, RETURN, END)),
+        ('(return (i32.const 1))', (I32_CONST_1, RETURN)),
     ),
     with_parser(
         grammar.instr,
@@ -404,33 +438,30 @@ SEXPRESSION_TESTS = tuple(concatv(
         ('block nop end', Block((), (Nop(), END))),
     ),
     with_parser(
-        grammar.expr,
+        grammar.folded_instr,
         # folded blocks
-        ('(block)', (Block((), End.as_tail()), END)),
-        ('(block $blk)', (NamedBlock('$blk', Block((), End.as_tail())), END)),
-        ('(block (nop))', (Block((), (Nop(), END)), END)),
-        ('(block nop)', (Block((), (Nop(), END)), END)),
+        ('(block)', Block((), End.as_tail())),
+        ('(block $blk)', NamedBlock('$blk', Block((), End.as_tail()))),
+        ('(block (nop))', Block((), (Nop(), END))),
+        ('(block nop)', Block((), (Nop(), END))),
         (
             '(block (result i32) (i32.const 7))',
-            (Block((i32,), (I32_CONST_7, END)), END),
+            Block((i32,), (I32_CONST_7, END)),
         ),
         (
             '(block (call $dummy))',
-            (Block((), (UnresolvedCall(UnresolvedFunctionIdx('$dummy')), END)), END),
+            Block((), (UnresolvedCall(UnresolvedFunctionIdx('$dummy')), END)),
         ),
         (
             '(block (result i32) (i32.ctz (return (i32.const 1))))',
-            (
-                Block(
-                    (i32,),
-                    (
-                        I32_CONST_1,
-                        RETURN,
-                        UnOp.from_opcode(BinaryOpcode.I32_CTZ),
-                        END,
-                    )
-                ),
-                END,
+            Block(
+                (i32,),
+                (
+                    I32_CONST_1,
+                    RETURN,
+                    UnOp.from_opcode(BinaryOpcode.I32_CTZ),
+                    END,
+                )
             ),
         ),
     ),
@@ -439,7 +470,7 @@ SEXPRESSION_TESTS = tuple(concatv(
     #     TODO: non-folded loops
     # ),
     with_parser(
-        grammar.expr,
+        grammar.folded_instr,
         # folded loops
         ('(loop)', Loop((), End.as_tail())),
         ('(loop $l)', NamedLoop('$l', Loop((), END_TAIL))),
@@ -458,7 +489,7 @@ SEXPRESSION_TESTS = tuple(concatv(
     #     TODO: non-folded if
     # ),
     with_parser(
-        grammar.expr,
+        grammar.folded_instr,
         # folded if
         ('(if (local.get 0) (then))', (LOCAL_ZERO_OP, BASIC_IF_INSTR)),
         ('(if (local.get 0) (then) (else))', (LOCAL_ZERO_OP, BASIC_IF_INSTR)),
@@ -547,16 +578,37 @@ SEXPRESSION_TESTS = tuple(concatv(
     with_parser(
         grammar._global,
         ('(global $a i32 (i32.const 2))', NamedGlobal('$a', Global(GlobalType.const(i32), (I32_CONST_2, END)))),  # noqa: E501
+        ('(global $a (mut i32) (i32.const 2))', NamedGlobal('$a', Global(GlobalType.var(i32), (I32_CONST_2, END)))),  # noqa: E501
+        ('(global (;1;) i32 (i32.const 3))', Global(GlobalType.const(i32), (I32_CONST_3, END))),
+    ),
+    with_parser(
+        grammar.table_type,
+        ('0 funcref', TableType(Limits(0, None), FunctionAddress)),
+    ),
+    with_parser(
+        grammar.table,
+        ('(table 0 funcref)', Table(TableType(Limits(0, None), FunctionAddress))),
+        ('(table $t 10 funcref)', NamedTable('$t', Table(TableType(Limits(10, None), FunctionAddress)))),  # noqa: E501
+    ),
+    with_parser(
+        grammar.table_with_elements,
+        (
+            '(table funcref (elem $func))',
+            (
+                Table(TableType(Limits(1, 1), FunctionAddress)),
+                (I32_CONST_0, END),
+                (UnresolvedFunctionIdx('$func'),),
+            ),
+        ),
+        cmp_fn=cmp_table_with_elements,
     ),
 ))
 
 
 def pytest_generate_tests(metafunc):
-    metafunc.parametrize('parser,sexpr,expected', SEXPRESSION_TESTS)
+    metafunc.parametrize('parser,sexpr,expected,cmp_fn', SEXPRESSION_TESTS)
 
 
-def test_sexpression_parsing(parser, sexpr, expected):
+def test_sexpression_parsing(parser, sexpr, expected, cmp_fn):
     result = parser.parseString(sexpr)
-    assert len(result) == 1
-    actual = result[0]
-    assert actual == expected
+    cmp_fn(result, expected)

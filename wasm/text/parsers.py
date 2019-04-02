@@ -1,3 +1,7 @@
+import uuid
+
+import numpy
+
 from wasm._utils.toolz import (
     concat,
     curry,
@@ -55,7 +59,7 @@ def concatenate_tokens(s, loc, toks):
 
 
 @curry
-def parse_simple_op(instruction_class, s, loc, toks):
+def parse_simple_class(instruction_class, s, loc, toks):
     # TODO: validation that toks has a single element
     return instruction_class()
 
@@ -70,6 +74,48 @@ def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
         return resolved_class(var)
     else:
         raise Exception("INVALID")
+
+
+#
+# Table
+#
+def parse_table_with_elements(s, loc, toks):
+    name, element_type, init_elements = toks
+    num_elements = len(init_elements)
+    limits = datatypes.Limits(num_elements, num_elements)
+    base_table = datatypes.Table(datatypes.TableType(limits, element_type))
+    if name is None:
+        name = str(uuid.uuid4())
+    table = ir.NamedTable(name, base_table)
+    table_idx = ir.UnresolvedTableIdx(name)
+    element_segment = ir.UnresolvedElementSegment(
+        table_idx=table_idx,
+        offset=(instructions.I32Const(numpy.uint32(0)), instructions.End()),
+        init=init_elements,
+    )
+    return table, element_segment
+
+
+def parse_elements_inline(s, loc, toks):
+    return tuple(toks)
+
+
+def parse_table(s, loc, toks):
+    name, table_type = toks
+    base_table = datatypes.Table(table_type)
+    if name is None:
+        return base_table
+    else:
+        return ir.NamedTable(name, base_table)
+
+
+def parse_table_type(s, loc, toks):
+    limits, element_type = toks
+    return datatypes.TableType(limits, element_type)
+
+
+def parse_elem_type(s, loc, toks):
+    return datatypes.FunctionAddress
 
 
 #
@@ -171,28 +217,18 @@ def _normalize_expressions(*expressions):
                 raise Exception("INVALID")
 
 
-def parse_exprs(s, loc, toks):
-    return _normalize_expressions(*toks)
-
-
 def parse_expr(s, loc, toks):
-    return _normalize_expressions(*toks) + instructions.End.as_tail()
+    return tuple(*toks) + instructions.End.as_tail()
 
 
 def parse_instrs(s, loc, toks):
     return _normalize_expressions(*toks)
 
 
-def parse_folded_instr(s, loc, toks):
-    op, exprs = toks
-    assert False
+def parse_folded_op(s, loc, toks):
+    op, *exprs = toks
 
-    if isinstance(exprs, (instructions.BaseInstruction, ir.BaseUnresolved)):
-        return (exprs, op)
-    elif isinstance(exprs, tuple):
-        return exprs[:-1] + (op,)
-    else:
-        raise Exception("INVALID")
+    return _normalize_expressions(*exprs) + (op,)
 
 
 #
@@ -225,20 +261,20 @@ parse_testop = parse_opcode_text_with_lookup(instructions.TestOp, TEXT_TO_OPCODE
 parse_unop = parse_opcode_text_with_lookup(instructions.UnOp, TEXT_TO_OPCODE)
 parse_binop = parse_opcode_text_with_lookup(instructions.BinOp, TEXT_TO_OPCODE)
 parse_relop = parse_opcode_text_with_lookup(instructions.RelOp, TEXT_TO_OPCODE)
-parse_wrapop = parse_simple_op(instructions.Wrap)
+parse_wrapop = parse_simple_class(instructions.Wrap)
 parse_extendop = parse_opcode_text_with_lookup(instructions.Extend, lookups.EXTEND_LOOKUP)
 parse_truncop = parse_opcode_text_with_lookup(instructions.Truncate, lookups.TRUNC_LOOKUP)
 parse_convertop = parse_opcode_text_with_lookup(instructions.Convert, lookups.CONVERT_LOOKUP)
-parse_demoteop = parse_simple_op(instructions.Demote)
-parse_promoteop = parse_simple_op(instructions.Promote)
+parse_demoteop = parse_simple_class(instructions.Demote)
+parse_promoteop = parse_simple_class(instructions.Promote)
 parse_reinterpretop = parse_opcode_text_with_lookup(instructions.Reinterpret, lookups.REINTERPRET_LOOKUP)  # noqa: E501
 
 
 #
 # Memory Ops
 #
-parse_memory_grow = parse_simple_op(instructions.MemoryGrow)
-parse_memory_size = parse_simple_op(instructions.MemorySize)
+parse_memory_grow = parse_simple_class(instructions.MemoryGrow)
+parse_memory_size = parse_simple_class(instructions.MemorySize)
 
 
 def parse_memory_access_op(s, loc, toks):
@@ -272,17 +308,17 @@ def parse_variable_op(s, loc, toks):
 #
 # Parametric Ops
 #
-parse_drop = parse_simple_op(instructions.Drop)
-parse_select = parse_simple_op(instructions.Select)
+parse_drop = parse_simple_class(instructions.Drop)
+parse_select = parse_simple_class(instructions.Select)
 
 
 #
 # Control Ops
 #
-parse_return = parse_simple_op(instructions.Return)
-parse_nop = parse_simple_op(instructions.Nop)
-parse_end = parse_simple_op(instructions.End)
-parse_unreachable = parse_simple_op(instructions.Unreachable)
+parse_return = parse_simple_class(instructions.Return)
+parse_nop = parse_simple_class(instructions.Nop)
+parse_end = parse_simple_class(instructions.End)
+parse_unreachable = parse_simple_class(instructions.Unreachable)
 
 
 parse_call_op = parse_simple_var_wrapper(instructions.Call, ir.UnresolvedCall)
@@ -324,10 +360,6 @@ def parse_block(s, loc, toks):
 
 def parse_folded_block(s, loc, toks):
     name, block_type, instrs = toks
-    if instrs is None:
-        assert False
-    elif instrs[-1] != instructions.End():
-        assert False
 
     base_block = instructions.Block(block_type, instrs)
     if name is None:
@@ -339,10 +371,6 @@ def parse_folded_block(s, loc, toks):
 
 def parse_folded_loop(s, loc, toks):
     name, block_type, instrs = toks
-    if instrs is None:
-        instrs = instructions.End.as_tail()
-    else:
-        instrs = instrs + instructions.End.as_tail()
 
     base_loop = instructions.Loop(block_type, instrs)
     if name is None:
@@ -356,8 +384,6 @@ def parse_folded_if(s, loc, toks):
     name, block_type, exprs, then_instrs, else_instrs = toks
     if else_instrs is None:
         else_instrs = instructions.End.as_tail()
-    else:
-        else_instrs = else_instrs + instructions.End.as_tail()
 
     if then_instrs is None:
         then_instrs = instructions.Else.as_tail()
@@ -432,6 +458,11 @@ def parse_bulk_params(s, loc, toks):
 #
 # Value Types
 #
+def parse_limits(s, loc, toks):
+    min, max = toks
+    return datatypes.Limits(min, max)
+
+
 def parse_valtype(s, loc, toks):
     return datatypes.ValType.from_str(_exactly_one(toks))
 

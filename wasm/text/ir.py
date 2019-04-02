@@ -9,10 +9,12 @@ from typing import (
 )
 
 from wasm.datatypes import (
+    Table,
     TypeIdx,
+    FunctionIdx,
     LabelIdx,
     ValType,
-    GlobalType,
+    Global,
 )
 from wasm.instructions.control import (
     Block,
@@ -200,4 +202,17 @@ class UnresolvedImport(NamedTuple):
 @register
 class NamedGlobal(NamedTuple):
     name: str
-    global_: GlobalType
+    global_: Global
+
+
+@register
+class NamedTable(NamedTuple):
+    name: str
+    table: Table
+
+
+@register
+class UnresolvedElementSegment(NamedTuple):
+    table_idx: Union[NamedTable, UnresolvedTableIdx]
+    offset: Tuple['BaseInstruction', ...]
+    init: Tuple[FunctionIdx, ...]

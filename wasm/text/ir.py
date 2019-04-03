@@ -81,6 +81,9 @@ class UnresolvedTypeIdx(NamedTuple):
 
 @register
 class LinkedFunctionType(NamedTuple):
+    # TODO: either this should be converted to be a `NamedFunctionType` and
+    # inline the name, or all of the `NamedThing` classes should be converted
+    # to follow this pattern (the latter might be more appropriate).
     type_idx: Union[UnresolvedTypeIdx, TypeIdx]
     function_type: UnresolvedFunctionType
 
@@ -230,3 +233,8 @@ class UnresolvedDataSegment(NamedTuple):
     memory_idx: UnresolvedMemoryIdx
     offset: Tuple['BaseInstruction', ...]
     init: bytes
+
+
+@register
+class UnresolvedStartFunction(NamedTuple):
+    function_idx: UnresolvedFunctionIdx

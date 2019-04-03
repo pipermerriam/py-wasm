@@ -5,7 +5,6 @@ from pyparsing import (
     StringStart,
     StringEnd,
     LineEnd,
-    NoMatch,
     Regex,
     OneOrMore,
     matchPreviousExpr,
@@ -22,6 +21,8 @@ from pyparsing import (
     alphanums,
 )
 
+from wasm.datatypes import MemoryIdx, TableIdx
+
 from . import parsers
 
 
@@ -31,6 +32,10 @@ def any_literal(*literals):
 
 def maybe(thing, default=None):
     return Optional(ws + thing, default=default)
+
+
+def many(thing):
+    return thing + ZeroOrMore(ws + thing)
 
 
 linechar = Regex(r'[\u0000-\uD7FF\U0000E000-\U0010FFFF]+')
@@ -60,9 +65,11 @@ close = Literal(')').suppress()
 
 # these should not be suppressed as they are used to build text representations
 # of opcodes
-ZEROX = Literal('0x')
 DOT = Literal('.')
 UNDERSCORE = Literal('_')
+
+# Suppressable
+ZEROX = Literal('0x').suppress()
 
 # a supressed underscore
 LODASH = UNDERSCORE.copy().suppress()
@@ -70,15 +77,61 @@ LODASH = UNDERSCORE.copy().suppress()
 HEXDIGIT = Word(hexnums, exact=1)
 HEXNUM = Combine(HEXDIGIT + ZeroOrMore(Optional(LODASH) + HEXDIGIT))
 
-HEX = ZEROX + HEXNUM
+HEX = (ZEROX + HEXNUM).setParseAction(parsers.parse_hex_to_int)
+
+EQUALS = Literal("=").suppress()
 
 PLUS = Literal('+')
 MINUS = Literal('-')
 
-
 DIGIT = Word(nums, exact=1)
 NUM = Combine(DIGIT + ZeroOrMore(Optional(LODASH) + DIGIT)).setParseAction(parsers.parse_integer_string)  # noqa: E501
 
+#
+# Keywords
+#
+RESULT = Literal("result").suppress()
+PARAM = Literal("param").suppress()
+LOCAL = Literal('local').suppress()
+
+CALL = Literal("call").suppress()
+CALL_INDIRECT = Literal("call_indirect").suppress()
+
+BR_IF = Literal("br_if").suppress()
+BR_TABLE = Literal("br_table").suppress()
+BR = Literal("br").suppress()
+
+BLOCK = Literal("block").suppress()
+
+LOOP = Literal("loop").suppress()
+
+IF = Literal("if").suppress()
+THEN = Literal("then").suppress()
+ELSE = Literal("else").suppress()
+
+FUNCREF = Literal("funcref").suppress()
+MUT = Literal("mut").suppress()
+
+OFFSET = Literal("offset").suppress()
+ALIGN = Literal("align").suppress()
+
+TYPE = Literal("type").suppress()
+FUNC = Literal("func").suppress()
+TABLE = Literal("table").suppress()
+MEMORY = Literal("memory").suppress()
+GLOBAL = Literal("global").suppress()
+ELEM = Literal("elem").suppress()
+DATA = Literal("data").suppress()
+START = Literal("start").suppress()
+IMPORT = Literal("import").suppress()
+EXPORT = Literal("export").suppress()
+
+MODULE = Literal("module").suppress()
+
+
+#
+# WASM Values
+#
 NAT = NUM ^ HEX
 INT = NAT ^ Combine(PLUS + NAT) ^ Combine(MINUS + NAT)
 FLOAT_AS_HEX = Combine(ZEROX + HEXNUM + DOT + Optional(HEXNUM) + Optional(CaselessLiteral('p') + NUM))  # noqa: E501
@@ -121,7 +174,6 @@ STRING = Combine(DOUBLE_QUOTE + ZeroOrMore(stringbody) + DOUBLE_QUOTE)
 
 VAR = NAT ^ SYMBOL_ID
 VALUE = INT ^ FLOAT
-
 I32 = Literal("i32")
 I64 = Literal("i64")
 F32 = Literal("f32")
@@ -130,30 +182,31 @@ F64 = Literal("f64")
 VALTYPE = (I32 ^ I64 ^ F32 ^ F64).setParseAction(parsers.parse_valtype)
 valtypes = (VALTYPE + ZeroOrMore(ws + VALTYPE)).setParseAction(parsers.parse_to_tuple)
 
-LOCAL = Literal('local').suppress()
 
+#
+# Locals, Params, Results
+#
 local_named = (LOCAL + ws + ID + ws + VALTYPE).setParseAction(parsers.parse_named_local)
 local_bulk = (LOCAL + Optional(ws + valtypes)).setParseAction(parsers.parse_bulk_locals)  # noqa: E501
 
 local = open + (local_named | local_bulk) + close
-locals = (local + ZeroOrMore(ws + local)).setParseAction(parsers.concatenate_tokens)
+locals = many(local).setParseAction(parsers.concatenate_tokens)
 
-
-PARAM = Literal("param").suppress()
 
 param_named = (PARAM + ws + ID + ws + VALTYPE).setParseAction(parsers.parse_named_param)
 param_bulk = (PARAM + Optional(ws + valtypes)).setParseAction(parsers.parse_bulk_params)
 
 param = open + (param_named | param_bulk) + close
-params = (param + ZeroOrMore(ws + param)).setParseAction(parsers.concatenate_tokens)
+params = many(param).setParseAction(parsers.concatenate_tokens)
 
-RESULT = Literal("result").suppress()
 
 result = open + RESULT + Optional(ws + valtypes) + close
-results = (result + ZeroOrMore(ws + result)).setParseAction(parsers.concatenate_tokens)
+results = many(result).setParseAction(parsers.concatenate_tokens)
 
 
+#
 # Indices Types
+#
 local_idx = VAR.copy().setParseAction(parsers.parse_local_idx)
 global_idx = VAR.copy().setParseAction(parsers.parse_global_idx)
 function_idx = VAR.copy().setParseAction(parsers.parse_function_idx)
@@ -162,17 +215,17 @@ memory_idx = VAR.copy().setParseAction(parsers.parse_memory_idx)
 table_idx = VAR.copy().setParseAction(parsers.parse_table_idx)
 type_idx = VAR.copy().setParseAction(parsers.parse_type_idx)
 
+function_indices = many(function_idx).setParseAction(parsers.parse_to_tuple)
+
 
 #
 # Typeuse
 #
-TYPE = Literal("type").suppress()
-
 typeuse_direct = open + TYPE + ws + type_idx + close
 
 typeuse_only_params = params.copy().setParseAction(parsers.parse_typeuse_only_params)
 typeuse_only_results = results.copy().setParseAction(parsers.parse_typeuse_only_results)
-typeuse_params_and_results = (params + ws + results).setParseAction(parsers.parse_typeuse_params_and_results)  # noqa: E501
+typeuse_params_and_results = (params + ws + results).setParseAction(parsers.parse_function_type)  # noqa: E501
 
 typeuse_function_type = typeuse_only_results ^ typeuse_only_params ^ typeuse_params_and_results
 typeuse_linked = (typeuse_direct + ws + typeuse_function_type).setParseAction(parsers.parse_typeuse_linked)  # noqa: E501
@@ -260,10 +313,10 @@ numeric_op = Or((
 #
 # Memory Ops
 #
-offset = Literal("offset=").suppress() + NAT
+offset = Combine(OFFSET + EQUALS).suppress() + NAT
 
 align_value = any_literal("1", "2", "4", "8", "16", "32")
-align = Combine(Literal("align=").suppress() + align_value)
+align = Combine(ALIGN + EQUALS) + align_value
 
 memory_arg = maybe(offset) + maybe(align)
 
@@ -327,15 +380,10 @@ end_op = Literal("end").setParseAction(parsers.parse_end)
 
 instrs = Forward()
 
-CALL = Literal("call").suppress()
-CALL_INDIRECT = Literal("call_indirect").suppress()
 
 call_op = (CALL + ws + function_idx).setParseAction(parsers.parse_call_op)
 call_indirect_op = (CALL_INDIRECT + ws + typeuse).setParseAction(parsers.parse_call_indirect_op)
 
-BR_IF = Literal("br_if").suppress()
-BR_TABLE = Literal("br_table").suppress()
-BR = Literal("br").suppress()
 
 br_if_op = (BR_IF + ws + label_idx).setParseAction(parsers.parse_br_if_op)
 br_table_op = (BR_TABLE + OneOrMore(ws + label_idx)).setParseAction(parsers.parse_br_table_op)
@@ -350,22 +398,14 @@ blk_type = maybe(results, default=())
 blk_instrs = maybe(instrs, default=()).setParseAction(parsers.parse_blk_instrs)
 blk_body = blk_name + blk_type + blk_instrs
 
-BLOCK = Literal("block").suppress()
-
 folded_block_op = (BLOCK + blk_body).setParseAction(parsers.parse_folded_block)
 block_instr = (folded_block_op + ws + end_op + maybe(matchPreviousExpr(BLOCK + blk_name))).setParseAction(parsers.parse_block)  # noqa: E501
 
-
-LOOP = Literal("loop").suppress()
 
 folded_loop_op = (LOOP + blk_body).setParseAction(parsers.parse_folded_loop)
 loop_instr = folded_loop_op + ws + end_op + maybe(matchPreviousExpr(LOOP + blk_name))
 
 folded_instr = Forward()
-
-IF = Literal("if").suppress()
-THEN = Literal("then").suppress()
-ELSE = Literal("else").suppress()
 
 folded_then = open + THEN + maybe(instrs) + close
 folded_else = open + ELSE + blk_instrs + close
@@ -378,36 +418,35 @@ control_op = return_op ^ nop_op ^ unreachable_op ^ call_op ^ call_indirect_op ^ 
 
 op = numeric_op ^ memory_op ^ variable_op ^ parametric_op ^ control_op
 
-folded_instrs = folded_instr + ZeroOrMore(ws + folded_instr)
+folded_instrs = many(folded_instr)
 folded_op = (op + maybe(folded_instrs, default=())).setParseAction(parsers.parse_folded_op)
 
 folded_instr << open + (folded_op ^ folded_block_op ^ folded_loop_op ^ folded_if_op) + close
 
 instr = op ^ block_instr ^ loop_instr ^ if_instr ^ folded_instr
-instrs << (instr + ZeroOrMore(ws + instr)).setParseAction(parsers.parse_instrs)
+instrs << many(instr).setParseAction(parsers.parse_instrs)
 expr = instrs.copy().setParseAction(parsers.parse_expr)
 
-EXPORT = Literal("export").suppress()
-FUNC = Literal("func").suppress()
-GLOBAL = Literal("global").suppress()
-TABLE = Literal("table").suppress()
-MEMORY = Literal("memory").suppress()
 
-MUT = Literal("mut").suppress()
+#
+# Individual "type" components
+#
+limits = (NAT + maybe(NAT)).setParseAction(parsers.parse_limits)
+
+function_type = (open + FUNC + maybe(params, ()) + maybe(results, ()) + close).setParseAction(parsers.parse_function_type)  # noqa: E501
 
 global_const = VALTYPE.copy().setParseAction(parsers.parse_valtype, parsers.parse_global_const)
 global_mut = (open + MUT + ws + VALTYPE + close).setParseAction(parsers.parse_global_mut)
 global_type = global_const ^ global_mut
-
-limits = (NAT + maybe(NAT)).setParseAction(parsers.parse_limits)
-
-FUNCREF = Literal("funcref").suppress()
 
 elem_type = FUNCREF.setParseAction(parsers.parse_elem_type)
 table_type = (limits + ws + elem_type).setParseAction(parsers.parse_table_type)
 
 memory_type = limits.copy().setParseAction(parsers.parse_memory_type)
 
+#
+# Exports
+#
 export_function = FUNC + ws + function_idx
 export_global = GLOBAL + ws + global_idx
 export_table = TABLE + ws + table_idx
@@ -415,10 +454,12 @@ export_memory = MEMORY + ws + memory_idx
 
 export_kind = open + (export_function ^ export_global ^ export_table ^ export_memory) + close
 export = (open + EXPORT + ws + STRING + ws + export_kind + close).setParseAction(parsers.parse_export)  # noqa: E501
-exports = export + ZeroOrMore(ws + export)
+exports = many(export)
 
-IMPORT = Literal("import").suppress()
 
+#
+# Imports
+#
 import_function = (FUNC + maybe(typeuse)).setParseAction(parsers.parse_import_function)
 import_global = GLOBAL + ws + global_type
 import_table = TABLE + ws + table_type
@@ -427,42 +468,80 @@ import_memory = MEMORY + ws + memory_type
 import_kind = open + (import_function ^ import_global ^ import_table ^ import_memory) + close
 import_ = (open + IMPORT + ws + STRING + ws + STRING + ws + import_kind + close).setParseAction(parsers.parse_import)  # noqa: E501
 
+
+#
+# Inlineable Import/Export
+#
 export_inline = open + EXPORT + ws + STRING + close
 import_inline = (open + IMPORT + ws + STRING + ws + STRING + close).setParseAction(parsers.parse_to_tuple)  # noqa: E501
 
 inline_exports = (export_inline + ZeroOrMore(ws + export_inline)).setParseAction(parsers.parse_to_tuple)  # noqa: E501
 
+
+#
+# Type
+#
+type = (open + TYPE + maybe(SYMBOL_ID) + ws + function_type).setParseAction(parsers.parse_type)
+
+
+#
+# Functions
+#
 function = (open + FUNC + maybe(SYMBOL_ID) + maybe(export_inline) + maybe(typeuse) + maybe(locals) + maybe(instrs) + close).setParseAction(parsers.parse_function)  # noqa: E501
 folded_function_import = (open + FUNC + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + ws + import_inline + maybe(typeuse) + close).setParseAction(parsers.parse_folded_function_import)  # noqa: E501
 
+
+#
+# Globals
+#
 global_ = (open + GLOBAL + maybe(SYMBOL_ID) + ws + global_type + ws + expr + close).setParseAction(parsers.parse_global)  # noqa: E501
 
-ELEM = Literal("elem").suppress()
 
-elements_inline = (open + ELEM + maybe(function_idx + ZeroOrMore(ws + function_idx), default=()) + close).setParseAction(parsers.parse_to_tuple)  # noqa: E501
+elements_inline = open + ELEM + function_indices + close
 
+#
+# Tables
+#
 table = (open + TABLE + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + maybe(import_inline) + ws + table_type + close).setParseAction(parsers.parse_table)  # noqa: E501
 table_with_elements = (open + TABLE + maybe(SYMBOL_ID) + ws + elem_type + ws + elements_inline + close).setParseAction(parsers.parse_table_with_elements)  # noqa: E501
 
-DATA = Literal("data").suppress()
 
-datastring = (STRING + ZeroOrMore(ws + STRING)).setParseAction(parsers.parse_datastring)
+datastring = many(STRING).setParseAction(parsers.parse_datastring)
 data_inline = open + DATA + maybe(datastring, b'') + close
 
+#
+# Memory
+#
 memory = (open + MEMORY + maybe(SYMBOL_ID) + maybe(inline_exports, ()) + maybe(import_inline) + ws + memory_type + close).setParseAction(parsers.parse_memory)  # noqa: E501
 memory_with_data = (open + MEMORY + maybe(SYMBOL_ID) + ws + data_inline + close).setParseAction(parsers.parse_memory_with_data)  # noqa: E501
 
-# TODO
-type = NoMatch()
-start = NoMatch()
-element_segment = NoMatch()
-data_segment = NoMatch()
 
+#
+# Start Function
+#
+start = (open + START + ws + function_idx + close).setParseAction(parsers.parse_start_function)
+
+
+#
+# Element Segments
+#
+offset_expr = open + OFFSET + ws + expr + close
+offset_instr = instr.copy().setParseAction(parsers.parse_offset_instr)
+
+element_segment = (open + ELEM + maybe(table_idx, TableIdx(0)) + ws + (offset_expr ^ offset_instr) + maybe(function_indices, ())).setParseAction(parsers.parse_element_segment)  # noqa: E501
+
+
+#
+# Data Segment
+#
+data_segment = (open + DATA + maybe(memory_idx, MemoryIdx(0)) + ws + (offset_expr ^ offset_instr) + maybe(datastring, b'')).setParseAction(parsers.parse_data_segment)  # noqa: E501
+
+
+#
+# Modules
+#
 module_field = type ^ import_ ^ function ^ table ^ memory ^ global_ ^ export ^ start ^ element_segment ^ data_segment  # noqa: E501
-module_fields = module_field + ZeroOrMore(ws + module_field)
+module_fields = many(module_field)
 
-
-MODULE = Literal("module")
-
-module = open + MODULE + maybe(SYMBOL_ID) + maybe(module_fields, ()) + close
+module = (open + MODULE + maybe(SYMBOL_ID) + maybe(module_fields, ()) + close).setParseAction(parsers.parse_module)  # noqa: E501
 top_level_module = StringStart() + module_fields + StringEnd()

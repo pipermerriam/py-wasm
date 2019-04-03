@@ -1,9 +1,12 @@
+import operator
 import uuid
 from typing import NamedTuple
 
 import numpy
 
+from wasm import constants
 from wasm._utils.toolz import (
+    groupby,
     concat,
     curry,
     complement,
@@ -106,6 +109,149 @@ def parse_simple_var_wrapper(resolved_class, unresolved_class, s, loc, toks):
         return resolved_class(var)
     else:
         raise Exception("INVALID")
+
+
+#
+# Modules
+#
+def parse_module(s, loc, toks):
+    name, sections = toks
+
+    (
+        types,
+        funcs,
+        tables,
+        mems,
+        globals,
+        elem,
+        data,
+        start,
+        imports,
+        exports,
+    ) = _collate_module(sections)
+
+    module = datatypes.Module(
+        version=constants.VERSION_1,
+        types=types,
+        funcs=funcs,
+        tables=tables,
+        mems=mems,
+        globals=globals,
+        elem=elem,
+        data=data,
+        start=start,
+        imports=imports,
+        exports=exports,
+    )
+
+    if name is None:
+        return module
+    else:
+        assert False
+
+
+def _is_function_type(value):
+    return isinstance(value, (ir.UnresolvedFunctionType, ir.NamedFunctionType))
+
+
+def _is_function(value):
+    return isinstance(value, (datatypes.Function))
+
+
+def _is_table(value):
+    return isinstance(value, (datatypes.Table, ir.NamedTable))
+
+
+def _is_memory(value):
+    return isinstance(value, (datatypes.Memory, ir.NamedMemory))
+
+
+def _is_global(value):
+    return isinstance(value, (datatypes.Global, ir.NamedGlobal))
+
+
+def _is_element_segment(value):
+    return isinstance(value, (datatypes.ElementSegment, ir.UnresolvedElementSegment))
+
+
+def _is_data_segment(value):
+    return isinstance(value, (datatypes.DataSegment, ir.UnresolvedDataSegment))
+
+
+def _is_start_function(value):
+    return isinstance(value, (datatypes.StartFunction, ir.UnresolvedStartFunction))
+
+
+def _is_import(value):
+    return isinstance(value, (datatypes.Import, ir.UnresolvedImport))
+
+
+def _is_export(value):
+    return isinstance(value, (datatypes.Export, ir.UnresolvedExport))
+
+
+# These **must** be in the same field order as the `Module` type accepts them
+# as arguments.
+EMPTY_SECTIONS_BY_TYPE = (
+    (datatypes.FunctionType, tuple()),
+    (datatypes.Function, tuple()),
+    (datatypes.Table, tuple()),
+    (datatypes.Memory, tuple()),
+    (datatypes.Global, tuple()),
+    (datatypes.ElementSegment, tuple()),
+    (datatypes.DataSegment, tuple()),
+    (datatypes.StartFunction, None),
+    (datatypes.Import, tuple()),
+    (datatypes.Export, tuple()),
+)
+SECTIONS_MATCH_FNS = (
+    (datatypes.FunctionType, _is_function_type),
+    (datatypes.Function, _is_function),
+    (datatypes.Table, _is_table),
+    (datatypes.Memory, _is_memory),
+    (datatypes.Global, _is_global),
+    (datatypes.ElementSegment, _is_element_segment),
+    (datatypes.DataSegment, _is_data_segment),
+    (datatypes.StartFunction, _is_start_function),
+    (datatypes.Import, _is_import),
+    (datatypes.Export, _is_export),
+)
+
+
+def _associate_section_type(value):
+    for section_type, match_fn in SECTIONS_MATCH_FNS:
+        if match_fn(value):
+            return (section_type, value)
+    else:
+        raise Exception(f"No section match for {value}")
+
+
+@to_tuple
+def _collate_module(all_module_fields):
+    fields_by_section_type = groupby(
+        operator.itemgetter(0),
+        map(_associate_section_type, all_module_fields)
+    )
+    for section_type, empty_section_value in EMPTY_SECTIONS_BY_TYPE:
+        yield fields_by_section_type.get(section_type, empty_section_value)
+
+
+#
+# Type
+#
+def parse_type(s, loc, toks):
+    name, function_type = toks
+
+    if name is None:
+        return function_type
+    else:
+        type_idx = ir.UnresolvedTypeIdx(name)
+        return ir.LinkedFunctionType(type_idx, function_type)
+
+
+def parse_function_type(s, loc, toks):
+    params, results = toks
+    return ir.UnresolvedFunctionType(params, results)
 
 
 #
@@ -307,6 +453,64 @@ def parse_folded_function_import(s, loc, toks):
 def parse_export(s, loc, toks):
     name, descriptor = toks
     return datatypes.Export(name, descriptor)
+
+
+#
+# Data Segment
+#
+def parse_data_segment(s, loc, toks):
+    memory_idx, offset_expr, init_bytes = toks
+    is_resolved = all_resolved(memory_idx, offset_expr)
+
+    if is_resolved:
+        return datatypes.DataSegment(
+            memory_idx=memory_idx,
+            offset=offset_expr,
+            init=init_bytes,
+        )
+    else:
+        return ir.UnresolvedDataSegment(
+            memory_idx=memory_idx,
+            offset=offset_expr,
+            init=init_bytes,
+        )
+
+
+#
+# Element Segment
+#
+def parse_element_segment(s, loc, toks):
+    table_idx, offset_expr, function_indices = toks
+    is_resolved = all_resolved(table_idx, offset_expr, *function_indices)
+
+    if is_resolved:
+        return datatypes.ElementSegment(
+            table_idx=table_idx,
+            offset=offset_expr,
+            init=function_indices,
+        )
+    else:
+        return ir.UnresolvedElementSegment(
+            table_idx=table_idx,
+            offset=offset_expr,
+            init=function_indices,
+        )
+
+
+def parse_offset_instr(s, loc, toks):
+    expr = _normalize_expressions(*toks)
+    return expr + instructions.End.as_tail()
+
+
+#
+# Start Function
+#
+def parse_start_function(s, loc, toks):
+    function_idx = _exactly_one(toks)
+    if any_unresolved(function_idx):
+        return ir.UnresolvedStartFunction(function_idx)
+    else:
+        return datatypes.StartFunction(function_idx)
 
 
 #
@@ -538,11 +742,6 @@ def parse_typeuse_only_results(s, loc, toks):
     return ir.UnresolvedFunctionType((), results)
 
 
-def parse_typeuse_params_and_results(s, loc, toks):
-    params, results = toks
-    return ir.UnresolvedFunctionType(params, results)
-
-
 #
 # Locals and Params
 #
@@ -606,3 +805,8 @@ parse_type_idx = parse_indices(datatypes.TypeIdx, ir.UnresolvedTypeIdx)
 def parse_integer_string(s, loc, toks):
     raw_num = _exactly_one(toks)
     return int(raw_num)
+
+
+def parse_hex_to_int(s, loc, toks):
+    hex_val = _exactly_one(toks)
+    return int(hex_val, 16)

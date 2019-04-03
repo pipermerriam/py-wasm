@@ -4,6 +4,10 @@ from wasm import constants
 from wasm._utils.decorators import to_tuple
 from wasm._utils.toolz import cons, concatv
 from wasm.datatypes import (
+    Module,
+    DataSegment,
+    ElementSegment,
+    StartFunction,
     Import,
     Memory,
     MemoryType,
@@ -90,6 +94,7 @@ from wasm.text.ir import (
     UnresolvedCall,
     UnresolvedCallIndirect,
     UnresolvedFunctionIdx,
+    UnresolvedStartFunction,
     UnresolvedTableIdx,
     UnresolvedMemoryIdx,
     UnresolvedFunctionType,
@@ -99,6 +104,7 @@ from wasm.text.ir import (
     UnresolvedVariableOp,
     UnresolvedFunction,
     LinkedFunctionType,
+    UnresolvedElementSegment,
 )
 
 
@@ -170,6 +176,9 @@ I32_CONST_3 = I32Const(numpy.uint32(3))
 I32_CONST_7 = I32Const(numpy.uint32(7))
 RETURN = Return()
 
+CONST_0_EXPR = (I32_CONST_0, END)
+CONST_1_EXPR = (I32_CONST_1, END)
+
 EMPTY_FUNC_TYPE = UnresolvedFunctionType((), ())
 
 COMPLEX_FUNCTION_SEXPR = """(func $complex
@@ -187,6 +196,20 @@ COMPLEX_FUNCTION = UnresolvedFunction(
     locals=(lf32, Local(i32, '$y'), li64, li32, lf64, li32),
     body=(UNREACHABLE, UNREACHABLE, END),
     name='$complex',
+)
+
+EMPTY_MODULE = Module(
+    version=constants.VERSION_1,
+    types=(),
+    funcs=(),
+    tables=(),
+    mems=(),
+    globals=(),
+    elem=(),
+    data=(),
+    start=None,
+    imports=(),
+    exports=(),
 )
 
 SEXPRESSION_TESTS = tuple(concatv(
@@ -527,6 +550,16 @@ SEXPRESSION_TESTS = tuple(concatv(
         ),
     ),
     with_parser(
+        grammar.type,
+        ('(type (func))', EMPTY_FUNC_TYPE),
+        ('(type $t (func))', LinkedFunctionType(UnresolvedTypeIdx('$t'), EMPTY_FUNC_TYPE)),
+        ('(type (func (param i32)))', UnresolvedFunctionType((pi32,), ())),
+        ('(type (func (param $x i32)))', UnresolvedFunctionType((Param(i32, '$x'),), ())),
+        ('(type (func (result i32)))', UnresolvedFunctionType((), (i32,))),
+        ('(type (func (param i32) (result i32)))', UnresolvedFunctionType((pi32,), (i32,))),
+        ('(type (func (param $x i32) (result i32)))', UnresolvedFunctionType((Param(i32, '$x'),), (i32,))),  # noqa: E501
+    ),
+    with_parser(
         grammar.export,
         ('(export "a" (func 0))', Export("a", FunctionIdx(0))),
         ('(export "a" (func $a))', UnresolvedExport("a", UnresolvedFunctionIdx("$a"))),
@@ -626,7 +659,7 @@ SEXPRESSION_TESTS = tuple(concatv(
             '(table funcref (elem $func))',
             (
                 Table(TableType(Limits(1, 1), FunctionAddress)),
-                (I32_CONST_0, END),
+                CONST_0_EXPR,
                 (UnresolvedFunctionIdx('$func'),),
             ),
         ),
@@ -669,7 +702,7 @@ SEXPRESSION_TESTS = tuple(concatv(
                 NamedMemory('$m', Memory(MemoryType(0, 0))),
                 UnresolvedDataSegment(
                     memory_idx=UnresolvedMemoryIdx('$m'),
-                    offset=(I32_CONST_0, END),
+                    offset=CONST_0_EXPR,
                     init=b'',
                 ),
             ),
@@ -680,11 +713,86 @@ SEXPRESSION_TESTS = tuple(concatv(
                 NamedMemory('$m', Memory(MemoryType(constants.PAGE_SIZE_64K, constants.PAGE_SIZE_64K))),  # noqa: E501
                 UnresolvedDataSegment(
                     memory_idx=UnresolvedMemoryIdx('$m'),
-                    offset=(I32_CONST_0, END),
+                    offset=CONST_0_EXPR,
                     init=b'unicorns',
                 ),
             ),
         ),
+    ),
+    with_parser(
+        grammar.start,
+        ('(start 1)', StartFunction(FunctionIdx(1))),
+        ('(start $f)', UnresolvedStartFunction(UnresolvedFunctionIdx('$f'))),
+    ),
+    with_parser(
+        grammar.element_segment,
+        ('(elem (i32.const 0))', ElementSegment(TableIdx(0), CONST_0_EXPR, ())),
+        (
+            '(elem (i32.const 0) $f $f)',
+            UnresolvedElementSegment(TableIdx(0), CONST_0_EXPR, (UnresolvedFunctionIdx('$f'), UnresolvedFunctionIdx('$f'))),  # noqa: E501
+        ),
+        ('(elem (offset (i32.const 0)))', ElementSegment(TableIdx(0), CONST_0_EXPR, ())),
+        (
+            '(elem (offset (i32.const 0)) $f $f)',
+            UnresolvedElementSegment(TableIdx(0), CONST_0_EXPR, (UnresolvedFunctionIdx('$f'), UnresolvedFunctionIdx('$f'))),  # noqa: E501
+        ),
+        ('(elem 0 (i32.const 0))', ElementSegment(TableIdx(0), CONST_0_EXPR, ())),
+        (
+            '(elem 0x0 (i32.const 0) $f $f)',
+            UnresolvedElementSegment(TableIdx(0), CONST_0_EXPR, (UnresolvedFunctionIdx('$f'), UnresolvedFunctionIdx('$f'))),  # noqa: E501
+        ),
+        ('(elem 0x000 (offset (i32.const 0)))', ElementSegment(TableIdx(0), CONST_0_EXPR, ())),
+        (
+            '(elem 0 (offset (i32.const 0)) $f $f)',
+            UnresolvedElementSegment(TableIdx(0), CONST_0_EXPR, (UnresolvedFunctionIdx('$f'), UnresolvedFunctionIdx('$f'))),  # noqa: E501
+        ),
+        (
+            '(elem $t (i32.const 0))',
+            UnresolvedElementSegment(UnresolvedTableIdx('$t'), CONST_0_EXPR, ()),
+        ),
+        (
+            '(elem $t (i32.const 0) $f $f)',
+            UnresolvedElementSegment(UnresolvedTableIdx('$t'), CONST_0_EXPR, (UnresolvedFunctionIdx('$f'), UnresolvedFunctionIdx('$f'))),  # noqa: E501
+        ),
+        (
+            '(elem $t (offset (i32.const 0)))',
+            UnresolvedElementSegment(UnresolvedTableIdx('$t'), CONST_0_EXPR, ()),
+        ),
+        (
+            '(elem $t (offset (i32.const 0)) $f $f)',
+            UnresolvedElementSegment(UnresolvedTableIdx('$t'), CONST_0_EXPR, (UnresolvedFunctionIdx('$f'), UnresolvedFunctionIdx('$f'))),  # noqa: E501
+        ),
+    ),
+    with_parser(
+        grammar.data_segment,
+        ('(data (i32.const 0))', DataSegment(MemoryIdx(0), CONST_0_EXPR, b'')),
+        ('(data (i32.const 1) "a" "" "bcd")', DataSegment(MemoryIdx(0), CONST_1_EXPR, b'abcd')),
+        ('(data (offset (i32.const 0)))', DataSegment(MemoryIdx(0), CONST_0_EXPR, b'')),
+        ('(data (offset (i32.const 0)) "" "a" "bc" "")', DataSegment(MemoryIdx(0), CONST_0_EXPR, b'abc')),  # noqa: E501
+        ('(data 0 (i32.const 0))', DataSegment(MemoryIdx(0), CONST_0_EXPR, b'')),
+        ('(data 0x0 (i32.const 1) "a" "" "bcd")', DataSegment(MemoryIdx(0), CONST_1_EXPR, b'abcd')),
+        ('(data 0x000 (offset (i32.const 0)))', DataSegment(MemoryIdx(0), CONST_0_EXPR, b'')),
+        ('(data 0 (offset (i32.const 0)) "" "a" "bc" "")', DataSegment(MemoryIdx(0), CONST_0_EXPR, b'abc')),  # noqa: E501
+        (
+            '(data $m (i32.const 0))',
+            UnresolvedDataSegment(UnresolvedMemoryIdx('$m'), CONST_0_EXPR, b''),
+        ),
+        (
+            '(data $m (i32.const 1) "a" "" "bcd")',
+            UnresolvedDataSegment(UnresolvedMemoryIdx('$m'), CONST_0_EXPR, b'abcd'),
+        ),
+        (
+            '(data $m (offset (i32.const 0)))',
+            UnresolvedDataSegment(UnresolvedMemoryIdx('$m'), CONST_0_EXPR, b''),
+        ),
+        (
+            '(data $m (offset (i32.const 0)) "" "a" "bc" "")',
+            UnresolvedDataSegment(UnresolvedMemoryIdx('$m'), CONST_0_EXPR, b'abc'),
+        ),
+    ),
+    with_parser(
+        grammar.module,
+        ('(module)', EMPTY_MODULE),
     ),
 ))
 

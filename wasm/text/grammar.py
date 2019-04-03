@@ -84,6 +84,11 @@ EQUALS = Literal("=").suppress()
 PLUS = Literal('+')
 MINUS = Literal('-')
 
+NAN = Literal('nan')
+INF = Literal('inf')
+
+COLON = Literal(':')
+
 DIGIT = Word(nums, exact=1)
 NUM = Combine(DIGIT + ZeroOrMore(Optional(LODASH) + DIGIT)).setParseAction(parsers.parse_integer_string)  # noqa: E501
 
@@ -130,14 +135,45 @@ MODULE = Literal("module").suppress()
 
 
 #
-# WASM Values
+# Value Primatives
+#
+SIGN = Optional(PLUS ^ MINUS)
+
+
+#
+# Integers
 #
 NAT = NUM ^ HEX
-INT = NAT ^ Combine(PLUS + NAT) ^ Combine(MINUS + NAT)
-FLOAT_AS_HEX = Combine(ZEROX + HEXNUM + DOT + Optional(HEXNUM) + Optional(CaselessLiteral('p') + NUM))  # noqa: E501
-FLOAT_AS_NUM = Combine(NUM + DOT + Optional(NUM) + Optional(CaselessLiteral('e') + NUM))
-FLOAT = FLOAT_AS_HEX ^ FLOAT_AS_NUM
+INT = NAT ^ Combine(SIGN + NAT)
 
+
+#
+# FLoats
+#
+FRAC = DIGIT + ZeroOrMore(Optional(LODASH) + DIGIT)
+HEXFRAC = HEXDIGIT + ZeroOrMore(Optional(LODASH) + HEXDIGIT)
+
+EXP_E = CaselessLiteral('e')
+EXP_P = CaselessLiteral('p')
+
+FLOAT_1 = Combine(NUM + DOT + FRAC)
+FLOAT_2 = Combine(NUM + EXP_P + SIGN + NUM)
+FLOAT_3 = Combine(NUM + DOT + FRAC + EXP_E + SIGN + NUM)
+
+
+HEXFLOAT_1 = Combine(ZEROX + HEXNUM + DOT + HEXFRAC)
+HEXFLOAT_2 = Combine(ZEROX + HEXNUM + EXP_P + SIGN + NUM)
+HEXFLOAT_3 = Combine(ZEROX + HEXNUM + DOT + HEXFRAC + EXP_P + SIGN + NUM)
+
+NUM_FLOAT = FLOAT_1 ^ FLOAT_2 ^ FLOAT_3
+HEXFLOAT = HEXFLOAT_1 ^ HEXFLOAT_2 ^ HEXFLOAT_3
+
+FLOAT = Combine(SIGN + (NUM_FLOAT ^ HEXFLOAT ^ INF ^ NAN ^ Combine(NAN + COLON + ZEROX + HEXNUM)))
+
+
+#
+# Strings
+#
 DOLLAR = Literal('$')
 idchars = alphanums + "_.+-*/\\^~=<>!?@#$%&|:'`"
 SYMBOL_ID = Combine(Literal('$') + Word(idchars))
@@ -145,7 +181,7 @@ ID = NAT ^ SYMBOL_ID
 
 DOUBLE_QUOTE = Literal('"').suppress()
 
-string_chars = Regex(
+base_string_chars = (
     r'['
     r'\u0020\u0021'
     # exclude \u0022: doublequote
@@ -157,6 +193,20 @@ string_chars = Regex(
     r'\U0000E000-\U0010FFFF'
     r']+'
 )
+
+string_chars = Regex(base_string_chars)
+string_chars_then_escape = Regex(
+    base_string_chars + (
+        # Make the preceeding character matching non-greedy
+        r'?'
+        # terminate at any of the forward slash escape
+        r'(?='
+        r'(\\[a-fA-F0-9]{2})|'
+        r'(\\n|\\t|\\r|\\\\|\\\'|\\")|'
+        r'(\\u\{[a-fA-F0-9]+\})'
+        r')'
+    )
+)
 string_escaped_values = any_literal(
     r"\n",
     r"\t",
@@ -164,12 +214,14 @@ string_escaped_values = any_literal(
     r"\\",
     r"\'",
     r'\"',
-).setParseAction(parsers._assert_false)
-string_escaped_unicode = Combine(Literal("\\u{") + HEXNUM + Literal('}')).setParseAction(parsers._assert_false)  # noqa: E501
-string_escaped_hex_char = Combine(Literal("\\") + HEXDIGIT + HEXDIGIT).setParseAction(parsers._assert_false)  # noqa: E501
-stringbody = string_chars ^ string_escaped_values ^ string_escaped_unicode ^ string_escaped_hex_char
+).setParseAction(parsers.parse_escaped_char)
+string_escaped_unicode = Combine(Literal("\\u{") + HEXNUM + Literal('}')).setParseAction(parsers.parse_escaped_unicode)  # noqa: E501
+string_escaped_hex_char = Combine(Literal("\\") + HEXDIGIT + HEXDIGIT).setParseAction(parsers.parse_escaped_char)  # noqa: E501
 
-# TODO: this doesn't fully cover the allowed characters.
+any_escaped_char = OneOrMore(string_escaped_values ^ string_escaped_unicode ^ string_escaped_hex_char)  # noqa: E501
+
+stringbody = any_escaped_char | string_chars_then_escape | string_chars
+
 STRING = Combine(DOUBLE_QUOTE + ZeroOrMore(stringbody) + DOUBLE_QUOTE)
 
 VAR = NAT ^ SYMBOL_ID
@@ -276,13 +328,13 @@ binop = (INTEGER_BINOP ^ FLOAT_BINOP).setParseAction(parsers.parse_binop)
 relop = (INTEGER_RELOP ^ FLOAT_RELOP).setParseAction(parsers.parse_relop)
 testop = Combine(INTEGER_TYPES + Literal(".eqz")).setParseAction(parsers.parse_testop)
 
-SIGN = Literal('s') ^ Literal('u')
+SIGNED = Literal('s') ^ Literal('u')
 
 wrapop = Combine(I32 + Literal(".wrap_") + I64).setParseAction(parsers.parse_wrapop)
-extendop = Combine(I64 + Literal(".extend_") + I32 + UNDERSCORE + SIGN).setParseAction(parsers.parse_extendop)  # noqa: E501
+extendop = Combine(I64 + Literal(".extend_") + I32 + UNDERSCORE + SIGNED).setParseAction(parsers.parse_extendop)  # noqa: E501
 
-truncop = Combine(INTEGER_TYPES + Literal(".trunc_") + FLOAT_TYPES + UNDERSCORE + SIGN).setParseAction(parsers.parse_truncop)  # noqa: E501
-convertop = Combine(FLOAT_TYPES + Literal(".convert_") + INTEGER_TYPES + UNDERSCORE + SIGN).setParseAction(parsers.parse_convertop)  # noqa: E501
+truncop = Combine(INTEGER_TYPES + Literal(".trunc_") + FLOAT_TYPES + UNDERSCORE + SIGNED).setParseAction(parsers.parse_truncop)  # noqa: E501
+convertop = Combine(FLOAT_TYPES + Literal(".convert_") + INTEGER_TYPES + UNDERSCORE + SIGNED).setParseAction(parsers.parse_convertop)  # noqa: E501
 
 demoteop = Combine(F32 + ".demote_" + F64).setParseAction(parsers.parse_demoteop)
 promoteop = Combine(F64 + ".promote_" + F32).setParseAction(parsers.parse_promoteop)
@@ -325,7 +377,7 @@ memory_bitsize = any_literal("8", "16", "32")
 LOAD_INTEGER_PREFIX = Combine(INTEGER_TYPES + Literal(".load"))
 LOAD_FLOAT_PREFIX = Combine(FLOAT_TYPES + Literal(".load"))
 
-memory_load_integer_op = Combine(LOAD_INTEGER_PREFIX + Optional(memory_bitsize + UNDERSCORE + SIGN))  # noqa: E501
+memory_load_integer_op = Combine(LOAD_INTEGER_PREFIX + Optional(memory_bitsize + UNDERSCORE + SIGNED))  # noqa: E501
 memory_load_float_op = LOAD_FLOAT_PREFIX
 
 memory_load_op = memory_load_integer_op ^ memory_load_float_op

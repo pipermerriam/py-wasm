@@ -1,3 +1,4 @@
+import ast
 import operator
 import uuid
 from typing import NamedTuple
@@ -58,10 +59,6 @@ def _is_unresolved(value):
         raise Exception(f"INVALID TYPE: {value}")
 
 
-def _assert_false(s, loc, toks):
-    assert False
-
-
 def _mk_exports_and_import(idx_class, name, export_names, import_data):
     idx = idx_class(name)
     exports = tuple(
@@ -80,6 +77,13 @@ def _mk_exports_and_import(idx_class, name, export_names, import_data):
         _import = None
 
     return exports, _import
+
+
+#
+# DEBUG
+#
+def assert_false(s, loc, toks):
+    assert False
 
 
 #
@@ -552,13 +556,13 @@ def parse_const_op(s, loc, toks):
     opcode = TEXT_TO_OPCODE[opcode_text]
 
     if opcode is BinaryOpcode.I32_CONST:
-        return instructions.I32Const(value)
+        return instructions.I32Const(numpy.uint32(value))
     elif opcode is BinaryOpcode.I64_CONST:
-        return instructions.I64Const(value)
+        return instructions.I64Const(numpy.uint64(value))
     elif opcode is BinaryOpcode.F32_CONST:
-        return instructions.F32Const(value)
+        return instructions.F32Const(numpy.float32(value))
     elif opcode is BinaryOpcode.F64_CONST:
-        return instructions.F64Const(value)
+        return instructions.F64Const(numpy.float64(value))
     else:
         raise Exception("TODO:")
 
@@ -810,3 +814,35 @@ def parse_integer_string(s, loc, toks):
 def parse_hex_to_int(s, loc, toks):
     hex_val = _exactly_one(toks)
     return int(hex_val, 16)
+
+
+def parse_escaped_char(s, loc, toks):
+    char = _exactly_one(toks)
+    print("LITERAL:", repr(char))
+    return ast.literal_eval(f'"{char}"')
+
+
+def validate_utf_char(value):
+    if value < 0xD800:
+        return
+    elif 0xE000 <= value < 0x110000:
+        return
+    else:
+        raise Exception("INVALID")
+
+
+def parse_escaped_unicode(s, loc, toks):
+    raw_value = _exactly_one(toks)
+    raw_value = raw_value[3:-1]
+    value_as_int = int(raw_value, 16)
+
+    validate_utf_char(value_as_int)
+
+    value_as_hex = hex(value_as_int)[2:]
+
+    if value_as_int <= 0xFFFF:
+        value_as_literal_string = f'"\\u{value_as_hex.rjust(4, "0")}"'
+    else:
+        value_as_literal_string = f'"\\u{value_as_hex.rjust(8, "0")}"'
+
+    return ast.literal_eval(value_as_literal_string)

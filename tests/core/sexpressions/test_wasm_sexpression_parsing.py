@@ -214,9 +214,28 @@ EMPTY_MODULE = Module(
 
 SEXPRESSION_TESTS = tuple(concatv(
     with_parser(
+        grammar.FLOAT,
+        ('0.0', '0.0'),
+        ('0.1', '0.1'),
+        ('nan', 'nan'),
+        ('-nan', '-nan'),
+        ('+nan', '+nan'),
+    ),
+    with_parser(
         grammar.STRING,
         ('"a"', "a"),
         ('"a_b"', "a_b"),
+    ),
+    with_parser(
+        grammar.string_chars_then_escape,
+        (r'arst\00', 'arst'),
+        (r'arst\u{00}', 'arst'),
+        (r'arst\n', 'arst'),
+        (r'arst\t', 'arst'),
+        (r'arst\r', 'arst'),
+        (r'arst\'', 'arst'),
+        (r'arst\"', 'arst'),
+        (r'arst\\', 'arst'),
     ),
     with_parser(
         grammar.comment,
@@ -670,6 +689,22 @@ SEXPRESSION_TESTS = tuple(concatv(
         ('""', b''),
         ('"arst"', b'arst'),
         ('"arst" "tsra"', b'arsttsra'),
+        # raw escapes
+        ('"\\00"', b'\x00'),
+        (r'"\00"', b'\x00'),
+        ('"\\01"', b'\x01'),
+        (r'"\01"', b'\x01'),
+        ('"\\00\\01"', b'\x00\x01'),
+        (r'"\00\01"', b'\x00\x01'),
+        (r'"\00arst\00"', b'\x00arst\x00'),
+        (r'"\00arst\00\01"', b'\x00arst\x00\x01'),
+        (r'"\00asm\01\00\00\00"', b"\00asm\01\00\00\00"),
+        # special escapes
+        ('"\\n"', b'\n'),
+        ('"\\t"', b'\t'),
+        # unicode escapes
+        (r'"\u{61}"', b'a'),
+        (r'"\u{0000000000061}"', b'a'),
     ),
     with_parser(
         grammar.data_inline,

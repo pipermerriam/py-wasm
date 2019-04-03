@@ -23,9 +23,34 @@ class ModuleCommand(NamedTuple):
     name: Optional[str]
 
 
+class BinaryModule(NamedTuple):
+    line: int
+    name: Optional[str]
+    data: bytes
+
+
+class QuoteModule(NamedTuple):
+    line: int
+    name: Optional[str]
+    data: str
+
+
 class Argument(NamedTuple):
     valtype: ValType
     value: TValue
+
+
+class Invoke(NamedTuple):
+    line: int
+    module_name: Optional[str]
+    function_name: str
+    args: Tuple[Argument, ...]
+
+
+class Get(NamedTuple):
+    line: int
+    module_name: Optional[str]
+    global_name: str
 
 
 class arithmetic_nan:
